@@ -1,7 +1,8 @@
 // src/App.js
 import React, { useState, useEffect } from 'react';
 import './App.css';
-import { Navbar, Container, Row, Col, Card, Button, Nav, Dropdown, Form, InputGroup, Badge } from 'react-bootstrap';
+import { Navbar, Container, Row, Col, Card, Button, Nav, Dropdown, Form, InputGroup, Badge, Modal } from 'react-bootstrap';
+
 
 function App() {
   const [books, setBooks] = useState([]);
@@ -15,6 +16,9 @@ function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [selectedGenre, setSelectedGenre] = useState('all');
+  const [accountType, setAccountType] = useState(() => localStorage.getItem('accountType') || '');
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingBook, setEditingBook] = useState(null);
 
   useEffect(() => {
     // Fetch books from the Express API (proxied in development)
@@ -64,7 +68,15 @@ function App() {
     e.preventDefault();
     if (username === 'admin' && password === 'admin') {
       localStorage.setItem('auth', 'true');
+      localStorage.setItem('accountType', 'admin');
       setIsAuthed(true);
+      setAccountType('admin');
+      setLoginError('');
+    } else if (username === 'patron' && password === 'patron') {
+      localStorage.setItem('auth', 'true');
+      localStorage.setItem('accountType', 'patron');
+      setIsAuthed(true);
+      setAccountType('patron');
       setLoginError('');
     } else {
       setLoginError('Invalid credentials');
@@ -73,10 +85,11 @@ function App() {
 
   const handleSignup = (e) => {
     e.preventDefault();
-    // Mock signup: accept any non-empty username/password
     if (username && password) {
       localStorage.setItem('auth', 'true');
+      localStorage.setItem('accountType', 'patron');
       setIsAuthed(true);
+      setAccountType('patron');
       setLoginError('');
     } else {
       setLoginError('Please fill out all fields');
@@ -85,17 +98,40 @@ function App() {
 
   const handleLogout = () => {
     localStorage.removeItem('auth');
+    localStorage.removeItem('accountType');
     setIsAuthed(false);
     setUsername('');
     setPassword('');
     setSearchTerm('');
     setSelectedGenre('all');
+    setAccountType('');
   };
 
   const handleCheckout = (bookId) => {
     // Mock checkout functionality
     console.log(`Checking out book ${bookId}`);
     // Here you would typically make an API call
+  };
+
+  const handleEditBook = (book) => {
+    setEditingBook(book);
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = () => {
+    // Mock save functionality - in real app, this would make an API call
+    const updatedBooks = books.map(book =>
+      book.id === editingBook.id ? editingBook : book
+    );
+    setBooks(updatedBooks);
+    setFilteredBooks(updatedBooks);
+    setShowEditModal(false);
+    setEditingBook(null);
+  };
+
+  const handleCancelEdit = () => {
+    setShowEditModal(false);
+    setEditingBook(null);
   };
 
   const getAvailabilityColor = (copies) => {
@@ -116,12 +152,21 @@ function App() {
   const renderBookCard = (book) => (
     <Col key={book.id} xs={12} sm={6} lg={4} xl={3}>
       <Card className="h-100 book-card">
-        <div className="book-cover-placeholder">
-          <div className="book-cover-content">
-            <i className="bi bi-book text-muted" style={{ fontSize: '2rem' }}></i>
-            <small className="text-muted d-block mt-2">{book.genre || 'Fiction'}</small>
+        {accountType === 'admin' && (
+          <div className="book-actions">
+            <Dropdown align="end">
+              <Dropdown.Toggle variant="link" className="book-action-toggle" no-caret>
+                <i className="bi bi-three-dots-vertical"></i>
+              </Dropdown.Toggle>
+              <Dropdown.Menu>
+                <Dropdown.Item onClick={() => handleEditBook(book)}>
+                  <i className="bi bi-pencil me-2"></i>
+                  Edit Book
+                </Dropdown.Item>
+              </Dropdown.Menu>
+            </Dropdown>
           </div>
-        </div>
+        )}
         <Card.Body className="d-flex flex-column">
           <Card.Title className="book-title">{book.title}</Card.Title>
           <Card.Subtitle className="book-author mb-3">
@@ -222,7 +267,7 @@ function App() {
           <Card className="stat-card text-center">
             <Card.Body>
               <div className="stat-icon mb-2">
-                <i className="bi bi-books text-primary" style={{ fontSize: '2rem' }}></i>
+                <i className="bi bi-book text-primary" style={{ fontSize: '2rem' }}></i>
               </div>
               <h4 className="stat-number">{books.length}</h4>
               <p className="stat-label text-muted mb-0">Total Books</p>
@@ -408,7 +453,7 @@ function App() {
                 <div className="page-actions">
                   <Badge bg="primary" className="fs-6 px-3 py-2">
                     <i className="bi bi-person-circle me-2"></i>
-                    Welcome, {username || 'User'}
+                    Welcome {accountType}, {username || 'User'}
                   </Badge>
                 </div>
               </div>
@@ -437,6 +482,89 @@ function App() {
           </>
         )}
       </Container>
+      {/* Edit Book Modal */}
+      <Modal show={showEditModal} onHide={handleCancelEdit} size="lg">
+        <Modal.Header closeButton>
+          <Modal.Title>Edit Book</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {editingBook && (
+            <Form>
+              <Row>
+                <Col md={6}>
+                  <Form.Group className="mb-3">
+                    <Form.Label>Title</Form.Label>
+                    <Form.Control
+                      type="text"
+                      value={editingBook.title}
+                      onChange={(e) => setEditingBook({ ...editingBook, title: e.target.value })}
+                    />
+                  </Form.Group>
+                </Col>
+                <Col md={6}>
+                  <Form.Group className="mb-3">
+                    <Form.Label>Author</Form.Label>
+                    <Form.Control
+                      type="text"
+                      value={editingBook.author}
+                      onChange={(e) => setEditingBook({ ...editingBook, author: e.target.value })}
+                    />
+                  </Form.Group>
+                </Col>
+              </Row>
+              <Form.Group className="mb-3">
+                <Form.Label>Description</Form.Label>
+                <Form.Control
+                  as="textarea"
+                  rows={3}
+                  value={editingBook.description}
+                  onChange={(e) => setEditingBook({ ...editingBook, description: e.target.value })}
+                />
+              </Form.Group>
+              <Row>
+                <Col md={4}>
+                  <Form.Group className="mb-3">
+                    <Form.Label>ISBN</Form.Label>
+                    <Form.Control
+                      type="text"
+                      value={editingBook.isbn}
+                      onChange={(e) => setEditingBook({ ...editingBook, isbn: e.target.value })}
+                    />
+                  </Form.Group>
+                </Col>
+                <Col md={4}>
+                  <Form.Group className="mb-3">
+                    <Form.Label>Page Count</Form.Label>
+                    <Form.Control
+                      type="number"
+                      value={editingBook.page_count}
+                      onChange={(e) => setEditingBook({ ...editingBook, page_count: parseInt(e.target.value) })}
+                    />
+                  </Form.Group>
+                </Col>
+                <Col md={4}>
+                  <Form.Group className="mb-3">
+                    <Form.Label>Available Copies</Form.Label>
+                    <Form.Control
+                      type="number"
+                      value={editingBook.copies}
+                      onChange={(e) => setEditingBook({ ...editingBook, copies: parseInt(e.target.value) })}
+                    />
+                  </Form.Group>
+                </Col>
+              </Row>
+            </Form>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={handleCancelEdit}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={handleSaveEdit}>
+            Save Changes
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </>
   );
 }
