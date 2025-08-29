@@ -10,6 +10,7 @@ function App() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
+  const [isSignup, setIsSignup] = useState(false);
 
   useEffect(() => {
     // Fetch books from the Express API (proxied in development)
@@ -46,6 +47,18 @@ function App() {
     setPassword('');
   };
 
+  const handleSignup = (e) => {
+    e.preventDefault();
+    // Mock signup: accept any non-empty username/password
+    if (username && password) {
+      localStorage.setItem('auth', 'true');
+      setIsAuthed(true);
+      setLoginError('');
+    } else {
+      setLoginError('Please fill out all fields');
+    }
+  };
+
   return (
     <>
       <Navbar bg={darkMode ? 'dark' : 'light'} data-bs-theme={darkMode ? 'dark' : 'light'} expand="md" className="shadow-sm">
@@ -74,8 +87,8 @@ function App() {
           <Row className="justify-content-center">
             <Col xs={12} sm={10} md={8} lg={6} xl={5}>
               <Card className="p-3 p-md-4">
-                <h3 className="mb-3 text-center">Sign in</h3>
-                <Form onSubmit={handleLogin}>
+                <h3 className="mb-3 text-center">{isSignup ? 'Create account' : 'Sign in'}</h3>
+                <Form onSubmit={isSignup ? handleSignup : handleLogin}>
                   <Form.Group className="mb-3" controlId="username">
                     <Form.Label>Email or Username</Form.Label>
                     <Form.Control type="text" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="admin" required />
@@ -86,9 +99,14 @@ function App() {
                   </Form.Group>
                   {loginError && <div className="text-danger mb-2">{loginError}</div>}
                   <div className="d-grid">
-                    <Button type="submit" variant="primary">Login</Button>
+                    <Button type="submit" variant="primary">{isSignup ? 'Create account' : 'Login'}</Button>
                   </div>
                 </Form>
+                <div className="mt-3 text-center">
+                  <Button variant="link" onClick={() => { setIsSignup(v => !v); setLoginError(''); }}>
+                    {isSignup ? 'Have an account? Sign in' : "Don't have an account? Sign up"}
+                  </Button>
+                </div>
               </Card>
             </Col>
           </Row>
