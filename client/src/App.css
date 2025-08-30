@@ -256,6 +256,12 @@ h4, .h4 {
   top: 12px;
   right: 12px;
   z-index: 10;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.book-card:hover .book-actions {
+  opacity: 1;
 }
 
 .book-action-toggle {
@@ -264,21 +270,38 @@ h4, .h4 {
   border-radius: 50%;
   transition: all var(--transition-fast);
   background: transparent;
-  border: none;
+  border: none !important;
+  outline: none !important;
   font-size: 1.1rem;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .book-action-toggle:hover {
   background-color: rgba(0, 0, 0, 0.1);
   color: var(--light-text-primary);
+  transform: scale(1.05);
+  outline: none;
+  border: none;
 }
 
 .book-action-toggle::after {
   display: none !important;
 }
 
+.book-action-toggle:focus,
+.book-action-toggle:focus-visible,
+.book-action-toggle:active {
+  outline: none !important;
+  border: none !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+}
+
 .book-card .card-body {
-  padding-top: 48px;
+  padding-top: var(--space-6);
 }
 
 .book-title {
@@ -900,9 +923,11 @@ body.dark-mode .input-group-text {
 
 body.dark-mode .book-action-toggle {
   color: var(--dark-text-muted);
+  background: rgba(30, 35, 40, 0.9);
+  backdrop-filter: blur(8px);
 }
 
 body.dark-mode .book-action-toggle:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(30, 35, 40, 1);
   color: var(--dark-text-primary);
 }

@@ -19,6 +19,15 @@ function App() {
   const [accountType, setAccountType] = useState(() => localStorage.getItem('accountType') || '');
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingBook, setEditingBook] = useState(null);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newBook, setNewBook] = useState({
+    title: '',
+    author: '',
+    isbn: '',
+    description: '',
+    page_count: 0,
+    copies: 1
+  });
 
   useEffect(() => {
     // Fetch books from the Express API (proxied in development)
@@ -132,6 +141,46 @@ function App() {
   const handleCancelEdit = () => {
     setShowEditModal(false);
     setEditingBook(null);
+  };
+
+  const handleOpenAdd = () => {
+    setNewBook({ title: '', author: '', isbn: '', description: '', page_count: 0, copies: 1 });
+    setShowAddModal(true);
+  };
+
+  const handleCloseAdd = () => {
+    setShowAddModal(false);
+  };
+
+  const handleCreateBook = async () => {
+    try {
+      const payload = {
+        title: newBook.title?.trim(),
+        author: newBook.author?.trim(),
+        isbn: newBook.isbn?.trim(),
+        description: newBook.description?.trim(),
+        page_count: Number(newBook.page_count) || 0,
+        copies: Number(newBook.copies) || 0,
+      };
+
+      const res = await fetch('/api/books', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        throw new Error('Failed to create book');
+      }
+      const created = await res.json();
+      const updated = [created, ...books];
+      setBooks(updated);
+      setFilteredBooks(updated);
+      setShowAddModal(false);
+      setNewBook({ title: '', author: '', isbn: '', description: '', page_count: 0, copies: 1 });
+    } catch (err) {
+      console.error('Create book error:', err);
+      // Optionally surface an alert/toast in future
+    }
   };
 
   const getAvailabilityColor = (copies) => {
@@ -377,7 +426,7 @@ function App() {
         </Container>
       </Navbar>
 
-      <Container className="mt-4">
+      <Container className="mt-4 pb-5">
         {!isAuthed ? (
           <Row className="justify-content-center">
             <Col xs={12} sm={10} md={8} lg={6} xl={5}>
@@ -468,11 +517,19 @@ function App() {
               renderEmptyState()
             ) : (
               <>
-                <div className="books-grid-header mb-4">
-                  <h2 className="h4 mb-0">Available Books</h2>
-                  <p className="text-muted mb-0">
-                    Showing {filteredBooks.length} of {books.length} books
-                  </p>
+                <div className="books-grid-header mb-4 d-flex justify-content-between align-items-center">
+                  <div>
+                    <h2 className="h4 mb-0">Available Books</h2>
+                    <p className="text-muted mb-0">
+                      Showing {filteredBooks.length} of {books.length} books
+                    </p>
+                  </div>
+                  {accountType === 'admin' && (
+                    <Button variant="success" onClick={handleOpenAdd}>
+                      <i className="bi bi-plus-circle me-2"></i>
+                      Add Book
+                    </Button>
+                  )}
                 </div>
                 <Row xs={1} sm={2} lg={3} xl={4} className="g-4">
                   {filteredBooks.map(renderBookCard)}
@@ -562,6 +619,90 @@ function App() {
           </Button>
           <Button variant="primary" onClick={handleSaveEdit}>
             Save Changes
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Add Book Modal */}
+      <Modal show={showAddModal} onHide={handleCloseAdd} size="lg">
+        <Modal.Header closeButton>
+          <Modal.Title>Add Book</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form>
+            <Row>
+              <Col md={6}>
+                <Form.Group className="mb-3">
+                  <Form.Label>Title</Form.Label>
+                  <Form.Control
+                    type="text"
+                    value={newBook.title}
+                    onChange={(e) => setNewBook({ ...newBook, title: e.target.value })}
+                    required
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={6}>
+                <Form.Group className="mb-3">
+                  <Form.Label>Author</Form.Label>
+                  <Form.Control
+                    type="text"
+                    value={newBook.author}
+                    onChange={(e) => setNewBook({ ...newBook, author: e.target.value })}
+                    required
+                  />
+                </Form.Group>
+              </Col>
+            </Row>
+            <Form.Group className="mb-3">
+              <Form.Label>Description</Form.Label>
+              <Form.Control
+                as="textarea"
+                rows={3}
+                value={newBook.description}
+                onChange={(e) => setNewBook({ ...newBook, description: e.target.value })}
+              />
+            </Form.Group>
+            <Row>
+              <Col md={4}>
+                <Form.Group className="mb-3">
+                  <Form.Label>ISBN</Form.Label>
+                  <Form.Control
+                    type="text"
+                    value={newBook.isbn}
+                    onChange={(e) => setNewBook({ ...newBook, isbn: e.target.value })}
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={4}>
+                <Form.Group className="mb-3">
+                  <Form.Label>Page Count</Form.Label>
+                  <Form.Control
+                    type="number"
+                    value={newBook.page_count}
+                    onChange={(e) => setNewBook({ ...newBook, page_count: parseInt(e.target.value) || 0 })}
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={4}>
+                <Form.Group className="mb-3">
+                  <Form.Label>Available Copies</Form.Label>
+                  <Form.Control
+                    type="number"
+                    value={newBook.copies}
+                    onChange={(e) => setNewBook({ ...newBook, copies: parseInt(e.target.value) || 0 })}
+                  />
+                </Form.Group>
+              </Col>
+            </Row>
+          </Form>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={handleCloseAdd}>
+            Cancel
+          </Button>
+          <Button variant="success" onClick={handleCreateBook}>
+            Create Book
           </Button>
         </Modal.Footer>
       </Modal>
