@@ -230,6 +230,11 @@ function App() {
     return found ? found.author : '';
   };
 
+  const getCheckoutDateByBookId = (bookId) => {
+    const found = patronActiveCheckouts.find(c => c.bookId === bookId);
+    return found ? new Date(found.checkoutDate).toLocaleDateString() : null;
+  };
+
   // Mock genres for demonstration
   const genres = ['all', 'Science Fiction', 'Fantasy', 'Mystery', 'Romance', 'Non-Fiction'];
 
@@ -536,8 +541,6 @@ function App() {
 
   const handleReturnBook = async (bookId) => {
     if (accountType !== 'patron') return;
-    const confirmReturn = window.confirm('Return this book?');
-    if (!confirmReturn) return;
     try {
       const userId = 2; // patron user id (placeholder)
       const res = await fetch('/api/patron/return', {
@@ -547,7 +550,7 @@ function App() {
       });
       if (!res.ok) {
         const msg = await res.text();
-        alert(msg || 'Return failed.');
+        console.error('Return failed:', msg);
         return;
       }
       // Refresh books and patron active checkouts
@@ -564,10 +567,8 @@ function App() {
         const data = await resCheckouts.json();
         setPatronActiveCheckouts(data.filter(c => !c.returnDate));
       }
-      alert('Book returned.');
     } catch (e) {
-      console.error(e);
-      alert('An error occurred while returning the book.');
+      console.error('An error occurred while returning the book.', e);
     }
   };
 
@@ -996,11 +997,17 @@ function App() {
         </Modal.Header>
         <Modal.Body>
           <div>
-            <p className="mb-1">Are you sure you want to return
-              {returnBookId ? ` "${getBookTitleById(returnBookId)}"` : ' this book'}?
+            <p className="mb-2">
+              Are you sure you want to return
+              {returnBookId ? ` \"${getBookTitleById(returnBookId)}\"` : ' this book'}?
             </p>
             {returnBookId && (
-              <small className="text-muted">by {getBookAuthorById(returnBookId)}</small>
+              <div>
+                <small className="text-muted d-block">by {getBookAuthorById(returnBookId)}</small>
+                {getCheckoutDateByBookId(returnBookId) && (
+                  <small className="text-muted">Checked out on {getCheckoutDateByBookId(returnBookId)}</small>
+                )}
+              </div>
             )}
           </div>
         </Modal.Body>
