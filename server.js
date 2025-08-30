@@ -121,7 +121,8 @@ app.post('/api/patron/checkout', (req, res) => {
     // to check for the checkout rules (max 3 books, 1 copy per book)
     const { userId, bookId } = req.body;
 
-    const patronCheckouts = checkouts.filter(c => c.userId === userId);
+    // Consider only active (unreturned) checkouts for rules
+    const patronCheckouts = checkouts.filter(c => c.userId === userId && !c.returnDate);
     const book = books.find(b => b.id === bookId);
 
     // Rule 1: A Patron may have at most 3 active checkouts at once.

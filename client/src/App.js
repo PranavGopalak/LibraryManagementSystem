@@ -282,7 +282,7 @@ function App() {
                   book.copies === 0 ||
                   checkoutBag.some(b => b.id === book.id) ||
                   patronActiveCheckouts.some(c => c.bookId === book.id) ||
-                  (checkoutBag.length + patronActiveCheckouts.length) >= 3
+                  (checkoutBag.length >= Math.max(0, 3 - patronActiveCheckouts.length))
                 }
                 className="checkout-btn"
               >
@@ -293,7 +293,7 @@ function App() {
                     ? 'In Bag'
                     : book.copies === 0
                       ? 'Out of Stock'
-                      : (checkoutBag.length + patronActiveCheckouts.length) >= 3
+                      : (checkoutBag.length >= Math.max(0, 3 - patronActiveCheckouts.length))
                         ? 'Limit Reached'
                         : 'Add to Bag'}
               </Button>
@@ -450,8 +450,13 @@ function App() {
 
   const addToBag = (book) => {
     if (accountType !== 'patron') return;
-    if (checkoutBag.length >= 3) {
-      alert('You can only check out up to 3 books.');
+    const remainingSlots = Math.max(0, 3 - patronActiveCheckouts.length);
+    if (remainingSlots <= 0) {
+      alert('You have reached your checkout limit of 3 books.');
+      return;
+    }
+    if (checkoutBag.length >= remainingSlots) {
+      alert(`You can add at most ${remainingSlots} more book${remainingSlots === 1 ? '' : 's'} to your bag.`);
       return;
     }
     if (checkoutBag.some(b => b.id === book.id)) {
@@ -514,6 +519,43 @@ function App() {
     } catch (e) {
       console.error(e);
       alert('An error occurred during checkout.');
+    }
+  };
+
+  const handleReturnBook = async (bookId) => {
+    if (accountType !== 'patron') return;
+    const confirmReturn = window.confirm('Return this book?');
+    if (!confirmReturn) return;
+    try {
+      const userId = 2; // patron user id (placeholder)
+      const res = await fetch('/api/patron/return', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, bookId })
+      });
+      if (!res.ok) {
+        const msg = await res.text();
+        alert(msg || 'Return failed.');
+        return;
+      }
+      // Refresh books and patron active checkouts
+      const [resBooks, resCheckouts] = await Promise.all([
+        fetch('/api/books'),
+        fetch(`/api/patron/checkouts/${userId}`)
+      ]);
+      if (resBooks.ok) {
+        const data = await resBooks.json();
+        setBooks(data);
+        setFilteredBooks(data);
+      }
+      if (resCheckouts.ok) {
+        const data = await resCheckouts.json();
+        setPatronActiveCheckouts(data.filter(c => !c.returnDate));
+      }
+      alert('Book returned.');
+    } catch (e) {
+      console.error(e);
+      alert('An error occurred while returning the book.');
     }
   };
 
@@ -652,7 +694,13 @@ function App() {
                                 <div className="fw-semibold">{book ? book.title : `Book #${co.bookId}`}</div>
                                 {book && <small className="text-muted">{book.author}</small>}
                               </div>
-                              <small className="text-muted">Checked out on {new Date(co.checkoutDate).toLocaleDateString()}</small>
+                              <div className="d-flex align-items-center">
+                                <small className="text-muted me-3">Checked out on {new Date(co.checkoutDate).toLocaleDateString()}</small>
+                                <Button variant="outline-danger" size="sm" onClick={() => handleReturnBook(co.bookId)}>
+                                  <i className="bi bi-arrow-counterclockwise me-1"></i>
+                                  Return
+                                </Button>
+                              </div>
                             </div>
                           );
                         })}
