@@ -931,3 +931,37 @@ body.dark-mode .book-action-toggle:hover {
   background-color: rgba(30, 35, 40, 1);
   color: var(--dark-text-primary);
 }
+
+/* Floating Checkout Bag */
+.checkout-bag-fab {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  border-radius: 9999px;
+  width: 54px;
+  height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.15);
+  z-index: 1050;
+}
+
+.checkout-bag-fab i {
+  font-size: 1.25rem;
+}
+
+.checkout-bag-count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  border-radius: 9999px;
+}
+
+body.dark-mode .checkout-bag-fab {
+  box-shadow: 0 10px 20px rgba(0,0,0,0.35);
+}

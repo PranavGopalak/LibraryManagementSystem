@@ -28,6 +28,9 @@ function App() {
     page_count: 0,
     copies: 1
   });
+  const [checkoutBag, setCheckoutBag] = useState([]);
+  const [showBagModal, setShowBagModal] = useState(false);
+  const [patronActiveCheckouts, setPatronActiveCheckouts] = useState([]);
 
   useEffect(() => {
     // Fetch books from the Express API (proxied in development)
@@ -72,6 +75,26 @@ function App() {
 
     setFilteredBooks(filtered);
   }, [searchTerm, selectedGenre, books]);
+
+  useEffect(() => {
+    const fetchPatronCheckouts = async () => {
+      if (accountType === 'patron' && isAuthed) {
+        try {
+          const userId = 2; // placeholder for patron
+          const res = await fetch(`/api/patron/checkouts/${userId}`);
+          if (res.ok) {
+            const data = await res.json();
+            setPatronActiveCheckouts(data.filter(c => !c.returnDate));
+          }
+        } catch (e) {
+          console.error('Failed to fetch patron checkouts', e);
+        }
+      } else {
+        setPatronActiveCheckouts([]);
+      }
+    };
+    fetchPatronCheckouts();
+  }, [accountType, isAuthed]);
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -251,15 +274,40 @@ function App() {
             </div>
           </div>
           <div className="d-grid">
-            <Button
-              variant="primary"
-              onClick={() => handleCheckout(book.id)}
-              disabled={book.copies === 0}
-              className="checkout-btn"
-            >
-              <i className="bi bi-cart-plus me-2"></i>
-              {book.copies === 0 ? 'Out of Stock' : 'Check Out'}
-            </Button>
+            {accountType === 'patron' ? (
+              <Button
+                variant="primary"
+                onClick={() => addToBag(book)}
+                disabled={
+                  book.copies === 0 ||
+                  checkoutBag.some(b => b.id === book.id) ||
+                  patronActiveCheckouts.some(c => c.bookId === book.id) ||
+                  (checkoutBag.length + patronActiveCheckouts.length) >= 3
+                }
+                className="checkout-btn"
+              >
+                <i className="bi bi-bag-plus me-2"></i>
+                {patronActiveCheckouts.some(c => c.bookId === book.id)
+                  ? 'Already Checked Out'
+                  : checkoutBag.some(b => b.id === book.id)
+                    ? 'In Bag'
+                    : book.copies === 0
+                      ? 'Out of Stock'
+                      : (checkoutBag.length + patronActiveCheckouts.length) >= 3
+                        ? 'Limit Reached'
+                        : 'Add to Bag'}
+              </Button>
+            ) : (
+              <Button
+                variant="primary"
+                onClick={() => handleCheckout(book.id)}
+                disabled={book.copies === 0}
+                className="checkout-btn"
+              >
+                <i className="bi bi-cart-plus me-2"></i>
+                {book.copies === 0 ? 'Out of Stock' : 'Check Out'}
+              </Button>
+            )}
           </div>
         </Card.Footer>
       </Card>
@@ -397,6 +445,78 @@ function App() {
     </div>
   );
 
+  const openBag = () => setShowBagModal(true);
+  const closeBag = () => setShowBagModal(false);
+
+  const addToBag = (book) => {
+    if (accountType !== 'patron') return;
+    if (checkoutBag.length >= 3) {
+      alert('You can only check out up to 3 books.');
+      return;
+    }
+    if (checkoutBag.some(b => b.id === book.id)) {
+      alert('You can only check out 1 copy of each book.');
+      return;
+    }
+    setCheckoutBag([...checkoutBag, book]);
+  };
+
+  const removeFromBag = (id) => {
+    setCheckoutBag(checkoutBag.filter(b => b.id !== id));
+  };
+
+  const submitCheckout = async () => {
+    try {
+      const userId = 2; // patron user id (placeholder)
+      const responses = await Promise.all(
+        checkoutBag.map(item =>
+          fetch('/api/patron/checkout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, bookId: item.id })
+          })
+        )
+      );
+
+      const errors = [];
+      for (const r of responses) {
+        if (!r.ok) {
+          const msg = await r.text();
+          errors.push(msg || 'Checkout failed for one item.');
+        }
+      }
+
+      // Always refetch books to reflect server-side stock after attempts
+      const resBooks = await fetch('/api/books');
+      if (resBooks.ok) {
+        const data = await resBooks.json();
+        setBooks(data);
+        setFilteredBooks(data);
+      }
+
+      // Refetch patron active checkouts
+      if (accountType === 'patron' && isAuthed) {
+        const res = await fetch(`/api/patron/checkouts/${userId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setPatronActiveCheckouts(data.filter(c => !c.returnDate));
+        }
+      }
+
+      if (errors.length) {
+        alert(errors[0]);
+      } else {
+        alert('Checkout successful!');
+      }
+
+      setCheckoutBag([]);
+      setShowBagModal(false);
+    } catch (e) {
+      console.error(e);
+      alert('An error occurred during checkout.');
+    }
+  };
+
   return (
     <>
       <Navbar bg={darkMode ? 'dark' : 'light'} data-bs-theme={darkMode ? 'dark' : 'light'} expand="md" className="shadow-sm">
@@ -508,7 +628,41 @@ function App() {
               </div>
             </div>
 
-            {renderStats()}
+            {accountType === 'admin' && renderStats()}
+
+            {accountType === 'patron' && (
+              <div className="patron-checkouts-section mb-5">
+                <Card className="stat-card">
+                  <Card.Body>
+                    <div className="d-flex justify-content-between align-items-center mb-3">
+                      <h5 className="mb-0">Your Active Checkouts</h5>
+                      <Badge bg={patronActiveCheckouts.length >= 3 ? 'danger' : 'secondary'}>
+                        {patronActiveCheckouts.length} / 3
+                      </Badge>
+                    </div>
+                    {patronActiveCheckouts.length === 0 ? (
+                      <p className="text-muted mb-0">You have no active checkouts.</p>
+                    ) : (
+                      <div className="list-group">
+                        {patronActiveCheckouts.map(co => {
+                          const book = books.find(b => b.id === co.bookId);
+                          return (
+                            <div key={co.id} className="list-group-item d-flex justify-content-between align-items-center">
+                              <div>
+                                <div className="fw-semibold">{book ? book.title : `Book #${co.bookId}`}</div>
+                                {book && <small className="text-muted">{book.author}</small>}
+                              </div>
+                              <small className="text-muted">Checked out on {new Date(co.checkoutDate).toLocaleDateString()}</small>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </Card.Body>
+                </Card>
+              </div>
+            )}
+
             {renderSearchAndFilters()}
 
             {isLoading ? (
@@ -703,6 +857,53 @@ function App() {
           </Button>
           <Button variant="success" onClick={handleCreateBook}>
             Create Book
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Checkout Bag Floating Button */}
+      {accountType === 'patron' && (
+        <Button
+          variant={darkMode ? 'light' : 'dark'}
+          className="checkout-bag-fab"
+          onClick={openBag}
+        >
+          <i className="bi bi-bag"></i>
+          {checkoutBag.length > 0 && (
+            <span className="checkout-bag-count">{checkoutBag.length}</span>
+          )}
+        </Button>
+      )}
+
+      {/* Checkout Bag Modal */}
+      <Modal show={showBagModal} onHide={closeBag}>
+        <Modal.Header closeButton>
+          <Modal.Title>Your Checkout Bag</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {checkoutBag.length === 0 ? (
+            <p className="mb-0 text-muted">Your bag is empty. Add up to 3 books.</p>
+          ) : (
+            <div className="list-group">
+              {checkoutBag.map(b => (
+                <div key={b.id} className="list-group-item d-flex justify-content-between align-items-center">
+                  <div>
+                    <div className="fw-semibold">{b.title}</div>
+                    <small className="text-muted">{b.author}</small>
+                  </div>
+                  <Button variant="outline-danger" size="sm" onClick={() => removeFromBag(b.id)}>
+                    <i className="bi bi-x-lg"></i>
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <div className="me-auto text-muted small">Max 3 books. 1 copy per title.</div>
+          <Button variant="secondary" onClick={closeBag}>Close</Button>
+          <Button variant="primary" onClick={submitCheckout} disabled={checkoutBag.length === 0}>
+            Checkout
           </Button>
         </Modal.Footer>
       </Modal>
