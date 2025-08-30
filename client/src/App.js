@@ -31,6 +31,8 @@ function App() {
   const [checkoutBag, setCheckoutBag] = useState([]);
   const [showBagModal, setShowBagModal] = useState(false);
   const [patronActiveCheckouts, setPatronActiveCheckouts] = useState([]);
+  const [showReturnConfirm, setShowReturnConfirm] = useState(false);
+  const [returnBookId, setReturnBookId] = useState(null);
 
   useEffect(() => {
     // Fetch books from the Express API (proxied in development)
@@ -216,6 +218,16 @@ function App() {
     if (copies === 0) return 'Out of Stock';
     if (copies <= 2) return 'Low Stock';
     return 'Available';
+  };
+
+  const getBookTitleById = (id) => {
+    const found = books.find(b => b.id === id);
+    return found ? found.title : '';
+  };
+
+  const getBookAuthorById = (id) => {
+    const found = books.find(b => b.id === id);
+    return found ? found.author : '';
   };
 
   // Mock genres for demonstration
@@ -559,6 +571,23 @@ function App() {
     }
   };
 
+  const requestReturnBook = (bookId) => {
+    setReturnBookId(bookId);
+    setShowReturnConfirm(true);
+  };
+
+  const cancelReturnRequest = () => {
+    setShowReturnConfirm(false);
+    setReturnBookId(null);
+  };
+
+  const confirmReturnRequest = async () => {
+    if (returnBookId == null) return;
+    await handleReturnBook(returnBookId);
+    setShowReturnConfirm(false);
+    setReturnBookId(null);
+  };
+
   return (
     <>
       <Navbar bg={darkMode ? 'dark' : 'light'} data-bs-theme={darkMode ? 'dark' : 'light'} expand="md" className="shadow-sm">
@@ -696,7 +725,11 @@ function App() {
                               </div>
                               <div className="d-flex align-items-center">
                                 <small className="text-muted me-3">Checked out on {new Date(co.checkoutDate).toLocaleDateString()}</small>
-                                <Button variant="outline-danger" size="sm" onClick={() => handleReturnBook(co.bookId)}>
+                                <Button
+                                  variant="outline-danger"
+                                  onClick={() => requestReturnBook(co.bookId)}
+                                  size="sm"
+                                >
                                   <i className="bi bi-arrow-counterclockwise me-1"></i>
                                   Return
                                 </Button>
@@ -952,6 +985,30 @@ function App() {
           <Button variant="secondary" onClick={closeBag}>Close</Button>
           <Button variant="primary" onClick={submitCheckout} disabled={checkoutBag.length === 0}>
             Checkout
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Return Confirmation Modal */}
+      <Modal show={showReturnConfirm} onHide={cancelReturnRequest} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Confirm Return</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <div>
+            <p className="mb-1">Are you sure you want to return
+              {returnBookId ? ` "${getBookTitleById(returnBookId)}"` : ' this book'}?
+            </p>
+            {returnBookId && (
+              <small className="text-muted">by {getBookAuthorById(returnBookId)}</small>
+            )}
+          </div>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={cancelReturnRequest}>Cancel</Button>
+          <Button variant="danger" onClick={confirmReturnRequest}>
+            <i className="bi bi-arrow-counterclockwise me-2"></i>
+            Confirm Return
           </Button>
         </Modal.Footer>
       </Modal>
