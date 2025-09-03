@@ -1,1 +1,1 @@
-express mysql2 cors bootstrap react-bootstrap
+express mysql2 cors bootstrap react-bootstrap dotenv
