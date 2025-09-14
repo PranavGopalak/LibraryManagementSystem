@@ -1,7 +1,10 @@
 // src/App.js
 import React, { useState, useEffect } from 'react';
+
 import './App.css';
 import { Navbar, Container, Row, Col, Card, Button, Nav, Dropdown, Form, InputGroup, Badge, Modal } from 'react-bootstrap';
+import { signup as apiSignup, login as apiLogin, storeToken, clearToken as clearAuthToken } from './api/auth';
+
 
 
 function App() {
@@ -10,6 +13,7 @@ function App() {
   const [darkMode, setDarkMode] = useState(false);
   const [isAuthed, setIsAuthed] = useState(() => localStorage.getItem('auth') === 'true');
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [isSignup, setIsSignup] = useState(false);
@@ -98,43 +102,72 @@ function App() {
     fetchPatronCheckouts();
   }, [accountType, isAuthed]);
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    if (username === 'admin' && password === 'admin') {
+    try {
+      console.log('[UI][LOGIN] submitting', { usernameOrEmail: username });
+      const res = await apiLogin({ usernameOrEmail: username, password });
+      storeToken(res.token);
       localStorage.setItem('auth', 'true');
-      localStorage.setItem('accountType', 'admin');
+      localStorage.setItem('accountType', res.user?.role || 'patron');
       setIsAuthed(true);
-      setAccountType('admin');
+      setAccountType(res.user?.role || 'patron');
       setLoginError('');
-    } else if (username === 'patron' && password === 'patron') {
-      localStorage.setItem('auth', 'true');
-      localStorage.setItem('accountType', 'patron');
-      setIsAuthed(true);
-      setAccountType('patron');
-      setLoginError('');
-    } else {
-      setLoginError('Invalid credentials');
+      console.log('[UI][LOGIN] success', res.user);
+    } catch (err) {
+      console.warn('[UI][LOGIN] error', err);
+      setLoginError(err?.message || 'Login failed');
     }
   };
 
-  const handleSignup = (e) => {
+  const handleSignup = async (e) => {
     e.preventDefault();
-    if (username && password) {
+    try {
+      // Simple client-side validation to avoid round trips
+      const usernameValid = typeof username === 'string' && /^[A-Za-z0-9_]{3,30}$/.test(username);
+      const emailValid = typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+      const passwordValid = typeof password === 'string' && password.length >= 8;
+      if (!usernameValid || !emailValid || !passwordValid) {
+        const msg = !usernameValid
+          ? 'Username must be 3-30 chars: letters, numbers, underscore.'
+          : !emailValid
+            ? 'Please enter a valid email address.'
+            : 'Password must be at least 8 characters.';
+        setLoginError(msg);
+        console.warn('[UI][SIGNUP] client validation failed', { usernameValid, emailValid, passwordValid });
+        return;
+      }
+      console.log('[UI][SIGNUP] submitting', { username, emailPresent: !!email });
+      const res = await apiSignup({ username, email, password });
+      storeToken(res.token);
       localStorage.setItem('auth', 'true');
-      localStorage.setItem('accountType', 'patron');
+      localStorage.setItem('accountType', res.user?.role || 'patron');
       setIsAuthed(true);
-      setAccountType('patron');
+      setAccountType(res.user?.role || 'patron');
       setLoginError('');
-    } else {
-      setLoginError('Please fill out all fields');
+      console.log('[UI][SIGNUP] success', res.user);
+    } catch (err) {
+      console.warn('[UI][SIGNUP] error', err);
+      const serverMsg = err?.data?.details
+        ? (!err.data.details.usernameValid
+          ? 'Username must be 3-30 chars: letters, numbers, underscore.'
+          : !err.data.details.emailValid
+            ? 'Please enter a valid email address.'
+            : !err.data.details.passwordValid
+              ? 'Password must be at least 8 characters.'
+              : err?.message)
+        : err?.message;
+      setLoginError(serverMsg || 'Signup failed');
     }
   };
 
   const handleLogout = () => {
     localStorage.removeItem('auth');
     localStorage.removeItem('accountType');
+    clearAuthToken();
     setIsAuthed(false);
     setUsername('');
+    setEmail('');
     setPassword('');
     setSearchTerm('');
     setSelectedGenre('all');
@@ -632,26 +665,63 @@ function App() {
                 </div>
 
                 <Form onSubmit={isSignup ? handleSignup : handleLogin}>
-                  <Form.Group className="mb-3" controlId="username">
-                    <Form.Label>Email or Username</Form.Label>
-                    <Form.Control
-                      type="text"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      placeholder={isSignup ? "Choose a username" : "admin"}
-                      required
-                    />
-                  </Form.Group>
-                  <Form.Group className="mb-3" controlId="password">
-                    <Form.Label>Password</Form.Label>
-                    <Form.Control
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder={isSignup ? "Create a password" : "admin"}
-                      required
-                    />
-                  </Form.Group>
+                  {isSignup ? (
+                    <>
+                      <Form.Group className="mb-3" controlId="signup_username">
+                        <Form.Label>Username</Form.Label>
+                        <Form.Control
+                          type="text"
+                          value={username}
+                          onChange={(e) => setUsername(e.target.value)}
+                          placeholder="Choose a username"
+                          required
+                        />
+                      </Form.Group>
+                      <Form.Group className="mb-3" controlId="signup_email">
+                        <Form.Label>Email</Form.Label>
+                        <Form.Control
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          placeholder="you@example.com"
+                          required
+                        />
+                      </Form.Group>
+                      <Form.Group className="mb-3" controlId="signup_password">
+                        <Form.Label>Password</Form.Label>
+                        <Form.Control
+                          type="password"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder="Create a password"
+                          required
+                        />
+                      </Form.Group>
+                    </>
+                  ) : (
+                    <>
+                      <Form.Group className="mb-3" controlId="login_usernameOrEmail">
+                        <Form.Label>Email or Username</Form.Label>
+                        <Form.Control
+                          type="text"
+                          value={username}
+                          onChange={(e) => setUsername(e.target.value)}
+                          placeholder="Email or username"
+                          required
+                        />
+                      </Form.Group>
+                      <Form.Group className="mb-3" controlId="login_password">
+                        <Form.Label>Password</Form.Label>
+                        <Form.Control
+                          type="password"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder="Your password"
+                          required
+                        />
+                      </Form.Group>
+                    </>
+                  )}
                   {loginError && (
                     <div className="alert alert-danger py-2 mb-3">
                       <i className="bi bi-exclamation-triangle me-2"></i>
@@ -999,7 +1069,7 @@ function App() {
           <div>
             <p className="mb-2">
               Are you sure you want to return
-              {returnBookId ? ` \"${getBookTitleById(returnBookId)}\"` : ' this book'}?
+              {returnBookId ? ` "${getBookTitleById(returnBookId)}"` : ' this book'}?
             </p>
             {returnBookId && (
               <div>

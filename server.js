@@ -4,11 +4,18 @@ const { Connector } = require("@google-cloud/cloud-sql-connector");
 const mysql = require("mysql2/promise");
 const express = require('express');
 const cors = require('cors');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const app = express();
 const port = 3001;
 
 app.use(express.json());
 app.use(cors());
+// Basic request logger for debugging
+app.use((req, res, next) => {
+    console.log('[REQ]', req.method, req.path);
+    next();
+});
 
 // In-memory array for users (without passwords for now)
 let users = [
@@ -19,6 +26,175 @@ let users = [
 // A simple test route
 app.get('/', (req, res) => {
     res.send('Library Management System API is running!');
+});
+
+// Auth helpers and middleware
+function generateJwtToken(user) {
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+        throw new Error('JWT_SECRET is not set');
+    }
+    return jwt.sign({ id: user.id, username: user.username, role: user.role }, jwtSecret, { expiresIn: '7d' });
+}
+
+function authenticateToken(req, res, next) {
+    const authHeader = req.headers['authorization'] || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (!token) {
+        return res.status(401).json({ message: 'Unauthorized' });
+    }
+    try {
+        const payload = jwt.verify(token, process.env.JWT_SECRET);
+        req.user = payload;
+        return next();
+    } catch (err) {
+        return res.status(401).json({ message: 'Invalid or expired token' });
+    }
+}
+
+async function initializeSchema() {
+    const createUsersTableSql = `
+        CREATE TABLE IF NOT EXISTS users (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            username VARCHAR(50) NOT NULL UNIQUE,
+            email VARCHAR(255) NOT NULL UNIQUE,
+            password_hash VARCHAR(255) NOT NULL,
+            role ENUM('admin','patron') NOT NULL DEFAULT 'patron',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_users_username (username),
+            INDEX idx_users_email (email)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `;
+    await pool.query(createUsersTableSql);
+
+    // If a legacy users table exists without new columns, add them safely
+    try {
+        const [cols] = await pool.query(
+            `SELECT column_name AS name FROM information_schema.columns WHERE table_schema = ? AND table_name = 'users'`,
+            [process.env.DB_NAME]
+        );
+        const have = new Set(cols.map(c => c.name));
+        const alterStatements = [];
+        if (!have.has('email')) alterStatements.push(`ALTER TABLE users ADD COLUMN email VARCHAR(255) NOT NULL`);
+        if (!have.has('password_hash')) alterStatements.push(`ALTER TABLE users ADD COLUMN password_hash VARCHAR(255) NOT NULL`);
+        if (!have.has('role')) alterStatements.push(`ALTER TABLE users ADD COLUMN role ENUM('admin','patron') NOT NULL DEFAULT 'patron'`);
+        if (!have.has('created_at')) alterStatements.push(`ALTER TABLE users ADD COLUMN created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP`);
+        for (const stmt of alterStatements) await pool.query(stmt);
+
+        // Ensure indexes (skip if already exist)
+        const [idx] = await pool.query(
+            `SELECT index_name FROM information_schema.statistics WHERE table_schema = ? AND table_name = 'users'`,
+            [process.env.DB_NAME]
+        );
+        const existingIdx = new Set(idx.map(i => i.index_name));
+        if (!existingIdx.has('idx_users_username')) {
+            try { await pool.query(`CREATE INDEX idx_users_username ON users (username)`); } catch (_) { }
+        }
+        if (!existingIdx.has('idx_users_email') && have.has('email')) {
+            try { await pool.query(`CREATE INDEX idx_users_email ON users (email)`); } catch (_) { }
+        }
+    } catch (e) {
+        console.warn('Users table migration skipped or partially applied:', e.message || e);
+    }
+}
+
+// Auth routes
+app.post('/api/auth/signup', async (req, res) => {
+    let connection;
+    try {
+        const { username, email, password } = req.body || {};
+        console.log('[AUTH][SIGNUP] payload received', {
+            username,
+            emailPresent: typeof email === 'string',
+            passwordLength: typeof password === 'string' ? password.length : undefined
+        });
+        const usernameValid = typeof username === 'string' && /^[A-Za-z0-9_]{3,30}$/.test(username);
+        const emailValid = typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+        const passwordValid = typeof password === 'string' && password.length >= 8;
+        if (!usernameValid || !emailValid || !passwordValid) {
+            console.warn('[AUTH][SIGNUP] validation failed', { usernameValid, emailValid, passwordValid });
+            return res.status(400).json({ message: 'Invalid input', details: { usernameValid, emailValid, passwordValid } });
+        }
+
+        connection = await pool.getConnection();
+        await connection.beginTransaction();
+
+        const passwordHash = await bcrypt.hash(password, 12);
+        console.log('[AUTH][SIGNUP] password hashed');
+        const insertSql = `INSERT INTO users (username, email, password_hash, role) VALUES (?, ?, ?, 'patron')`;
+        const [result] = await connection.query(insertSql, [username, email, passwordHash]);
+        console.log('[AUTH][SIGNUP] user inserted (tx)', { insertId: result.insertId });
+        const newUser = { id: result.insertId, username, email, role: 'patron' };
+
+        // Generate token before committing to ensure we don't keep a row if token creation fails
+        const token = generateJwtToken(newUser);
+        console.log('[AUTH][SIGNUP] token generated');
+
+        await connection.commit();
+        return res.status(201).json({ user: newUser, token });
+    } catch (error) {
+        if (connection) {
+            try { await connection.rollback(); } catch (_) { }
+        }
+        if (error && error.code === 'ER_DUP_ENTRY') {
+            console.warn('[AUTH][SIGNUP] duplicate entry');
+            return res.status(409).json({ message: 'Username or email already in use' });
+        }
+        if (error && error.code === 'ER_BAD_FIELD_ERROR') {
+            console.error('[AUTH][SIGNUP] schema mismatch (missing column?)', error);
+            return res.status(500).json({ message: 'Users table schema is outdated. Restart server to run migrations or update schema.', code: error.code });
+        }
+        if (error && error.message === 'JWT_SECRET is not set') {
+            console.error('[AUTH][SIGNUP] JWT secret missing');
+            return res.status(500).json({ message: 'Server auth not configured. Set JWT_SECRET and restart.' });
+        }
+        console.error('[AUTH][SIGNUP] failed:', error);
+        return res.status(500).json({ message: 'Error creating user' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+    try {
+        const { usernameOrEmail, password } = req.body || {};
+        console.log('[AUTH][LOGIN] payload received', { usernameOrEmailPresent: typeof usernameOrEmail === 'string', passwordLength: typeof password === 'string' ? password.length : undefined });
+        if (typeof usernameOrEmail !== 'string' || typeof password !== 'string') {
+            return res.status(400).json({ message: 'Invalid input' });
+        }
+        const selectSql = `SELECT id, username, email, password_hash, role FROM users WHERE username = ? OR email = ? LIMIT 1`;
+        const [rows] = await pool.query(selectSql, [usernameOrEmail, usernameOrEmail]);
+        if (!rows || rows.length === 0) {
+            console.warn('[AUTH][LOGIN] user not found');
+            return res.status(401).json({ message: 'Invalid credentials' });
+        }
+        const userRow = rows[0];
+        const match = await bcrypt.compare(password, userRow.password_hash);
+        if (!match) {
+            console.warn('[AUTH][LOGIN] password mismatch');
+            return res.status(401).json({ message: 'Invalid credentials' });
+        }
+        const user = { id: userRow.id, username: userRow.username, email: userRow.email, role: userRow.role };
+        const token = generateJwtToken(user);
+        console.log('[AUTH][LOGIN] success', { userId: user.id });
+        return res.status(200).json({ user, token });
+    } catch (error) {
+        console.error('[AUTH][LOGIN] failed:', error);
+        return res.status(500).json({ message: 'Error logging in' });
+    }
+});
+
+app.get('/api/auth/me', authenticateToken, async (req, res) => {
+    try {
+        const [rows] = await pool.query(`SELECT id, username, email, role, created_at FROM users WHERE id = ?`, [req.user.id]);
+        if (!rows || rows.length === 0) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        return res.status(200).json({ user: rows[0] });
+    } catch (error) {
+        console.error('Failed to fetch current user:', error);
+        return res.status(500).json({ message: 'Error fetching user' });
+    }
 });
 
 
@@ -270,6 +446,9 @@ async function startServer() {
         });
 
         console.log("Successfully connected to the database!");
+
+        // Initialize schema
+        await initializeSchema();
 
 
         app.listen(port, () => {
