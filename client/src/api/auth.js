@@ -24,11 +24,11 @@ async function request(path, options = {}) {
     return data;
 }
 
-export async function signup({ username, email, password }) {
+export async function signup({ username, email, password, role = 'patron', adminInviteCode }) {
     console.log('[API][SIGNUP] sending payload', { username, emailPresent: !!email });
     return request('/api/auth/signup', {
         method: 'POST',
-        body: JSON.stringify({ username, email, password })
+        body: JSON.stringify({ username, email, password, role, adminInviteCode })
     });
 }
 

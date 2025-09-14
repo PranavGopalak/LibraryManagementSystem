@@ -15,6 +15,8 @@ function App() {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [signupRole, setSignupRole] = useState('patron');
+  const [adminCode, setAdminCode] = useState('');
   const [loginError, setLoginError] = useState('');
   const [isSignup, setIsSignup] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -137,8 +139,8 @@ function App() {
         console.warn('[UI][SIGNUP] client validation failed', { usernameValid, emailValid, passwordValid });
         return;
       }
-      console.log('[UI][SIGNUP] submitting', { username, emailPresent: !!email });
-      const res = await apiSignup({ username, email, password });
+      console.log('[UI][SIGNUP] submitting', { username, emailPresent: !!email, signupRole });
+      const res = await apiSignup({ username, email, password, role: signupRole, adminInviteCode: adminCode || undefined });
       storeToken(res.token);
       localStorage.setItem('auth', 'true');
       localStorage.setItem('accountType', res.user?.role || 'patron');
@@ -697,6 +699,31 @@ function App() {
                           required
                         />
                       </Form.Group>
+                      <Row>
+                        <Col md={6}>
+                          <Form.Group className="mb-3" controlId="signup_role">
+                            <Form.Label>Account Type</Form.Label>
+                            <Form.Select value={signupRole} onChange={(e) => setSignupRole(e.target.value)}>
+                              <option value="patron">Patron</option>
+                              <option value="admin">Admin</option>
+                            </Form.Select>
+                          </Form.Group>
+                        </Col>
+                        <Col md={6}>
+                          {signupRole === 'admin' && (
+                            <Form.Group className="mb-3" controlId="signup_admin_code">
+                              <Form.Label>Admin Invite Code</Form.Label>
+                              <Form.Control
+                                type="text"
+                                value={adminCode}
+                                onChange={(e) => setAdminCode(e.target.value)}
+                                placeholder="Enter admin code"
+                                required={signupRole === 'admin'}
+                              />
+                            </Form.Group>
+                          )}
+                        </Col>
+                      </Row>
                     </>
                   ) : (
                     <>

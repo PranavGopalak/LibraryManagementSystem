@@ -102,11 +102,12 @@ async function initializeSchema() {
 app.post('/api/auth/signup', async (req, res) => {
     let connection;
     try {
-        const { username, email, password } = req.body || {};
+        const { username, email, password, role: requestedRole, adminInviteCode } = req.body || {};
         console.log('[AUTH][SIGNUP] payload received', {
             username,
             emailPresent: typeof email === 'string',
-            passwordLength: typeof password === 'string' ? password.length : undefined
+            passwordLength: typeof password === 'string' ? password.length : undefined,
+            requestedRole: requestedRole || 'patron'
         });
         const usernameValid = typeof username === 'string' && /^[A-Za-z0-9_]{3,30}$/.test(username);
         const emailValid = typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -116,15 +117,30 @@ app.post('/api/auth/signup', async (req, res) => {
             return res.status(400).json({ message: 'Invalid input', details: { usernameValid, emailValid, passwordValid } });
         }
 
+        // Determine final role with security check for admin
+        let finalRole = 'patron';
+        if (requestedRole === 'admin') {
+            const requiredCode = process.env.ADMIN_INVITE_CODE;
+            if (!requiredCode) {
+                console.warn('[AUTH][SIGNUP] admin signup requested but ADMIN_INVITE_CODE is not set');
+                return res.status(403).json({ message: 'Admin signup is disabled.' });
+            }
+            if (adminInviteCode !== requiredCode) {
+                console.warn('[AUTH][SIGNUP] invalid admin invite code');
+                return res.status(403).json({ message: 'Invalid admin invite code.' });
+            }
+            finalRole = 'admin';
+        }
+
         connection = await pool.getConnection();
         await connection.beginTransaction();
 
         const passwordHash = await bcrypt.hash(password, 12);
         console.log('[AUTH][SIGNUP] password hashed');
-        const insertSql = `INSERT INTO users (username, email, password_hash, role) VALUES (?, ?, ?, 'patron')`;
-        const [result] = await connection.query(insertSql, [username, email, passwordHash]);
+        const insertSql = `INSERT INTO users (username, email, password_hash, role) VALUES (?, ?, ?, ?)`;
+        const [result] = await connection.query(insertSql, [username, email, passwordHash, finalRole]);
         console.log('[AUTH][SIGNUP] user inserted (tx)', { insertId: result.insertId });
-        const newUser = { id: result.insertId, username, email, role: 'patron' };
+        const newUser = { id: result.insertId, username, email, role: finalRole };
 
         // Generate token before committing to ensure we don't keep a row if token creation fails
         const token = generateJwtToken(newUser);
