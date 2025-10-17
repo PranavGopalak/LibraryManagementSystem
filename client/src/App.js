@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 
 import './App.css';
 import { Navbar, Container, Row, Col, Card, Button, Nav, Dropdown, Form, InputGroup, Badge, Modal } from 'react-bootstrap';
-import { signup as apiSignup, login as apiLogin, storeToken, clearToken as clearAuthToken } from './api/auth';
+import { signup as apiSignup, login as apiLogin, storeToken, clearToken as clearAuthToken, getToken } from './api/auth';
 
 
 
@@ -88,8 +88,9 @@ function App() {
     const fetchPatronCheckouts = async () => {
       if (accountType === 'patron' && isAuthed) {
         try {
-          const userId = 2; // placeholder for patron
-          const res = await fetch(`/api/patron/checkouts/${userId}`);
+          const storedUserId = Number(localStorage.getItem('user_id'));
+          if (!storedUserId) return;
+          const res = await fetch(`/api/patron/checkouts/${storedUserId}`);
           if (res.ok) {
             const data = await res.json();
             setPatronActiveCheckouts(data.filter(c => !c.returnDate));
@@ -111,6 +112,12 @@ function App() {
       const res = await apiLogin({ usernameOrEmail: username, password });
       storeToken(res.token);
       localStorage.setItem('auth', 'true');
+      if (res.user && typeof res.user.id !== 'undefined') {
+        localStorage.setItem('user_id', String(res.user.id));
+      }
+      if (res.user && res.user.username) {
+        localStorage.setItem('username', res.user.username);
+      }
       localStorage.setItem('accountType', res.user?.role || 'patron');
       setIsAuthed(true);
       setAccountType(res.user?.role || 'patron');
@@ -143,6 +150,12 @@ function App() {
       const res = await apiSignup({ username, email, password, role: signupRole, adminInviteCode: adminCode || undefined });
       storeToken(res.token);
       localStorage.setItem('auth', 'true');
+      if (res.user && typeof res.user.id !== 'undefined') {
+        localStorage.setItem('user_id', String(res.user.id));
+      }
+      if (res.user && res.user.username) {
+        localStorage.setItem('username', res.user.username);
+      }
       localStorage.setItem('accountType', res.user?.role || 'patron');
       setIsAuthed(true);
       setAccountType(res.user?.role || 'patron');
@@ -166,6 +179,8 @@ function App() {
   const handleLogout = () => {
     localStorage.removeItem('auth');
     localStorage.removeItem('accountType');
+    localStorage.removeItem('user_id');
+    localStorage.removeItem('username');
     clearAuthToken();
     setIsAuthed(false);
     setUsername('');
@@ -524,13 +539,17 @@ function App() {
 
   const submitCheckout = async () => {
     try {
-      const userId = 2; // patron user id (placeholder)
+      const token = getToken();
+      if (!token) {
+        alert('Your session has expired. Please sign in again.');
+        return;
+      }
       const responses = await Promise.all(
         checkoutBag.map(item =>
           fetch('/api/patron/checkout', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId, bookId: item.id })
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ bookId: item.id })
           })
         )
       );
@@ -553,10 +572,13 @@ function App() {
 
       // Refetch patron active checkouts
       if (accountType === 'patron' && isAuthed) {
-        const res = await fetch(`/api/patron/checkouts/${userId}`);
-        if (res.ok) {
-          const data = await res.json();
-          setPatronActiveCheckouts(data.filter(c => !c.returnDate));
+        const storedUserId = Number(localStorage.getItem('user_id'));
+        if (storedUserId) {
+          const res = await fetch(`/api/patron/checkouts/${storedUserId}`);
+          if (res.ok) {
+            const data = await res.json();
+            setPatronActiveCheckouts(data.filter(c => !c.returnDate));
+          }
         }
       }
 
@@ -577,11 +599,15 @@ function App() {
   const handleReturnBook = async (bookId) => {
     if (accountType !== 'patron') return;
     try {
-      const userId = 2; // patron user id (placeholder)
+      const token = getToken();
+      if (!token) {
+        alert('Your session has expired. Please sign in again.');
+        return;
+      }
       const res = await fetch('/api/patron/return', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, bookId })
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ bookId })
       });
       if (!res.ok) {
         const msg = await res.text();
@@ -591,14 +617,18 @@ function App() {
       // Refresh books and patron active checkouts
       const [resBooks, resCheckouts] = await Promise.all([
         fetch('/api/books'),
-        fetch(`/api/patron/checkouts/${userId}`)
+        (async () => {
+          const storedUserId = Number(localStorage.getItem('user_id'));
+          if (!storedUserId) return { ok: false };
+          return fetch(`/api/patron/checkouts/${storedUserId}`);
+        })()
       ]);
       if (resBooks.ok) {
         const data = await resBooks.json();
         setBooks(data);
         setFilteredBooks(data);
       }
-      if (resCheckouts.ok) {
+      if (resCheckouts && resCheckouts.ok) {
         const data = await resCheckouts.json();
         setPatronActiveCheckouts(data.filter(c => !c.returnDate));
       }

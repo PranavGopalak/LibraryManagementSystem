@@ -2,12 +2,14 @@ const BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001';
 
 async function request(path, options = {}) {
     console.log('[API][REQUEST]', { url: `${BASE_URL}${path}`, method: options.method || 'GET' });
+    const { credentials = 'omit', headers: providedHeaders, ...rest } = options;
     const res = await fetch(`${BASE_URL}${path}`, {
+        credentials,
         headers: {
             'Content-Type': 'application/json',
-            ...(options.headers || {})
+            ...(providedHeaders || {})
         },
-        ...options
+        ...rest
     });
     const text = await res.text();
     let data;

@@ -340,39 +340,44 @@ app.get('/api/patron/checkouts/:userId', async (req, res) => {
 });
 
 // Check out a book
-app.post('/api/patron/checkout', async (req, res) => {
-    const { userId, bookId } = req.body;
-    const connection = await pool.getConnection(); // Get a connection from the pool for the transaction
+app.post('/api/patron/checkout', authenticateToken, async (req, res) => {
+    const { bookId } = req.body || {};
+    const userId = req.user && req.user.id;
+    const connection = await pool.getConnection();
 
     try {
+        if (!Number.isFinite(Number(bookId)) || Number(bookId) <= 0) {
+            return res.status(400).json({ message: 'Invalid bookId' });
+        }
+
         await connection.beginTransaction();
 
         // Ensure the user exists to satisfy FK constraint
         const [userRows] = await connection.query('SELECT id FROM users WHERE id = ? FOR UPDATE', [userId]);
         if (userRows.length === 0) {
             await connection.rollback();
-            return res.status(404).send('User not found.');
+            return res.status(404).json({ message: 'User not found' });
         }
 
         // Rule 1: Check if the user already has 3 or more books checked out.
         const [activeRows] = await connection.query('SELECT COUNT(*) as count FROM active_checkouts WHERE user_id = ?', [userId]);
         if (activeRows[0].count >= 3) {
             await connection.rollback();
-            return res.status(400).send('Checkout limit reached. You may only check out up to 3 books.');
+            return res.status(400).json({ message: 'Checkout limit reached. You may only check out up to 3 books.' });
         }
 
         // Rule 2: Check if the user already has this specific book checked out.
         const [duplicateRows] = await connection.query('SELECT COUNT(*) as count FROM active_checkouts WHERE user_id = ? AND book_id = ?', [userId, bookId]);
         if (duplicateRows[0].count > 0) {
             await connection.rollback();
-            return res.status(400).send('You may only check out 1 copy of a given book.');
+            return res.status(400).json({ message: 'You may only check out 1 copy of a given book.' });
         }
 
         // Rule 3: Check if a copy is available. Lock the row to prevent race conditions.
         const [bookRows] = await connection.query('SELECT available_copies FROM books WHERE id = ? FOR UPDATE', [bookId]);
         if (bookRows.length === 0 || bookRows[0].available_copies < 1) {
             await connection.rollback();
-            return res.status(400).send('Book is not available for checkout.');
+            return res.status(400).json({ message: 'Book is not available for checkout.' });
         }
 
         // All rules passed, proceed with checkout
@@ -385,7 +390,7 @@ app.post('/api/patron/checkout', async (req, res) => {
             [userId, bookId]
         );
 
-        await connection.commit(); // Finalize the transaction
+        await connection.commit();
 
         res.status(201).json({
             message: 'Book checked out successfully.',
@@ -393,20 +398,25 @@ app.post('/api/patron/checkout', async (req, res) => {
         });
 
     } catch (error) {
-        await connection.rollback(); // Undo changes if anything went wrong
+        try { await connection.rollback(); } catch (_) { }
         console.error('Failed to checkout book:', error);
-        res.status(500).send('An error occurred during the checkout process.');
+        res.status(500).json({ message: 'An error occurred during the checkout process.' });
     } finally {
-        connection.release(); // Release the connection back to the pool
+        connection.release();
     }
 });
 
 // Return a book
-app.post('/api/patron/return', async (req, res) => {
-    const { userId, bookId } = req.body;
+app.post('/api/patron/return', authenticateToken, async (req, res) => {
+    const { bookId } = req.body || {};
+    const userId = req.user && req.user.id;
     const connection = await pool.getConnection();
 
     try {
+        if (!Number.isFinite(Number(bookId)) || Number(bookId) <= 0) {
+            return res.status(400).json({ message: 'Invalid bookId' });
+        }
+
         await connection.beginTransaction();
 
         // 1. Find the active checkout record. Lock the row.
@@ -414,7 +424,7 @@ app.post('/api/patron/return', async (req, res) => {
 
         if (checkoutRows.length === 0) {
             await connection.rollback();
-            return res.status(404).send('No active checkout found for this book and user.');
+            return res.status(404).json({ message: 'No active checkout found for this book and user.' });
         }
         const checkoutRecord = checkoutRows[0];
 
@@ -435,9 +445,9 @@ app.post('/api/patron/return', async (req, res) => {
         res.status(200).json({ message: 'Book returned successfully.' });
 
     } catch (error) {
-        await connection.rollback();
+        try { await connection.rollback(); } catch (_) { }
         console.error('Failed to return book:', error);
-        res.status(500).send('An error occurred during the return process.');
+        res.status(500).json({ message: 'An error occurred during the return process.' });
     } finally {
         connection.release();
     }
