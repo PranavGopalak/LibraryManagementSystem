@@ -23,7 +23,6 @@ function App() {
   const [isSignup, setIsSignup] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedGenre, setSelectedGenre] = useState('all');
   const [accountType, setAccountType] = useState(() => localStorage.getItem('accountType') || '');
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingBook, setEditingBook] = useState(null);
@@ -79,7 +78,7 @@ function App() {
     document.body.classList.toggle('dark-mode', darkMode);
   }, [darkMode]);
 
-  // Filter books based on search term and genre
+  // Filter books based on search term
   useEffect(() => {
     let filtered = books;
 
@@ -91,12 +90,8 @@ function App() {
       );
     }
 
-    if (selectedGenre !== 'all') {
-      filtered = filtered.filter(book => book.genre === selectedGenre);
-    }
-
     setFilteredBooks(filtered);
-  }, [searchTerm, selectedGenre, books]);
+  }, [searchTerm, books]);
 
   useEffect(() => {
     const fetchPatronCheckouts = async () => {
@@ -230,7 +225,6 @@ function App() {
     setEmail('');
     setPassword('');
     setSearchTerm('');
-    setSelectedGenre('all');
     setAccountType('');
   };
 
@@ -331,8 +325,6 @@ function App() {
     return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
   };
 
-  // Mock genres for demonstration
-  const genres = ['all', 'Science Fiction', 'Fantasy', 'Mystery', 'Romance', 'Non-Fiction'];
 
   const renderBookCard = (book) => (
     <Col key={book.id} xs={12} sm={6} lg={4} xl={3}>
@@ -444,19 +436,6 @@ function App() {
             />
           </InputGroup>
         </Col>
-        <Col xs={12} md={4}>
-          <Form.Select
-            value={selectedGenre}
-            onChange={(e) => setSelectedGenre(e.target.value)}
-            className="genre-select"
-          >
-            {genres.map(genre => (
-              <option key={genre} value={genre}>
-                {genre === 'all' ? 'All Genres' : genre}
-              </option>
-            ))}
-          </Form.Select>
-        </Col>
       </Row>
 
       {searchTerm && (
@@ -508,7 +487,6 @@ function App() {
           variant="outline-primary"
           onClick={() => {
             setSearchTerm('');
-            setSelectedGenre('all');
           }}
         >
           <i className="bi bi-arrow-clockwise me-2"></i>
