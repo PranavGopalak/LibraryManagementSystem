@@ -554,7 +554,7 @@ function App() {
     try {
       const token = getToken();
       if (!token) {
-        alert('Your session has expired. Please sign in again.');
+        console.error('Session expired');
         return;
       }
 
@@ -645,14 +645,13 @@ function App() {
       }
 
       if (errors.length) {
-        alert(`Some checkouts failed:\n${errors.join('\n')}`);
+        console.error('Some checkouts failed:', errors);
       } else {
         console.log('All checkouts successful!');
       }
 
     } catch (e) {
       console.error('Checkout error:', e);
-      alert('An error occurred during checkout.');
 
       // Revert all optimistic updates on error
       setBooks(prevBooks =>
@@ -704,7 +703,7 @@ function App() {
     try {
       const token = getToken();
       if (!token) {
-        alert('Your session has expired. Please sign in again.');
+        console.error('Session expired');
         return;
       }
       const res = await fetch('/api/patron/return', {
