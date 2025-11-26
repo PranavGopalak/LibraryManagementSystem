@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react';
 import './App.css';
 import { Navbar, Container, Row, Col, Card, Button, Nav, Dropdown, Form, InputGroup, Badge, Modal } from 'react-bootstrap';
 import { signup as apiSignup, login as apiLogin, storeToken, clearToken as clearAuthToken, getToken } from './api/auth';
+import AdminDashboard from './app/admin/page';
+import AdminBooksPage from './app/admin/books/page';
 
 
 
@@ -39,6 +41,13 @@ function App() {
   const [patronActiveCheckouts, setPatronActiveCheckouts] = useState([]);
   const [showReturnConfirm, setShowReturnConfirm] = useState(false);
   const [returnBookId, setReturnBookId] = useState(null);
+  const [adminView, setAdminView] = useState('dashboard'); // 'dashboard' or 'books'
+  // Expose functions for admin dashboard
+  const handleOpenAddModal = () => setShowAddModal(true);
+  const handleOpenEditModal = (book) => {
+    setEditingBook(book);
+    setShowEditModal(true);
+  };
 
   useEffect(() => {
     // Fetch books from the Express API (proxied in development)
@@ -809,27 +818,39 @@ function App() {
             </Col>
           </Row>
         ) : (
-          <>
-            <div className="page-header mb-5">
-              <div className="d-flex justify-content-between align-items-center mb-4">
-                <div>
-                  <h1 className="page-title">Library Collection</h1>
-                  <p className="page-subtitle text-muted">
-                    Discover and explore our vast collection of books
-                  </p>
-                </div>
-                <div className="page-actions">
-                  <Badge bg="primary" className="fs-6 px-3 py-2">
-                    <i className="bi bi-person-circle me-2"></i>
-                    Welcome {accountType}, {username || 'User'}
-                  </Badge>
+          accountType === 'admin' ? (
+            adminView === 'dashboard' ? (
+              <AdminDashboard
+                onAddBook={handleOpenAddModal}
+                onEditBook={handleOpenEditModal}
+                onViewBooks={() => setAdminView('books')}
+              />
+            ) : (
+              <AdminBooksPage
+                onAddBook={handleOpenAddModal}
+                onEditBook={handleOpenEditModal}
+                onBackToDashboard={() => setAdminView('dashboard')}
+              />
+            )
+          ) : (
+            <>
+              <div className="page-header mb-5">
+                <div className="d-flex justify-content-between align-items-center mb-4">
+                  <div>
+                    <h1 className="page-title">Library Collection</h1>
+                    <p className="page-subtitle text-muted">
+                      Discover and explore our vast collection of books
+                    </p>
+                  </div>
+                  <div className="page-actions">
+                    <Badge bg="primary" className="fs-6 px-3 py-2">
+                      <i className="bi bi-person-circle me-2"></i>
+                      Welcome {accountType}, {username || 'User'}
+                    </Badge>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {accountType === 'admin' && renderStats()}
-
-            {accountType === 'patron' && (
               <div className="patron-checkouts-section mb-5">
                 <Card className="stat-card">
                   <Card.Body>
@@ -870,36 +891,30 @@ function App() {
                   </Card.Body>
                 </Card>
               </div>
-            )}
 
-            {renderSearchAndFilters()}
+              {renderSearchAndFilters()}
 
-            {isLoading ? (
-              renderLoadingState()
-            ) : filteredBooks.length === 0 ? (
-              renderEmptyState()
-            ) : (
-              <>
-                <div className="books-grid-header mb-4 d-flex justify-content-between align-items-center">
-                  <div>
-                    <h2 className="h4 mb-0">Available Books</h2>
-                    <p className="text-muted mb-0">
-                      Showing {filteredBooks.length} of {books.length} books
-                    </p>
+              {isLoading ? (
+                renderLoadingState()
+              ) : filteredBooks.length === 0 ? (
+                renderEmptyState()
+              ) : (
+                <>
+                  <div className="books-grid-header mb-4 d-flex justify-content-between align-items-center">
+                    <div>
+                      <h2 className="h4 mb-0">Available Books</h2>
+                      <p className="text-muted mb-0">
+                        Showing {filteredBooks.length} of {books.length} books
+                      </p>
+                    </div>
                   </div>
-                  {accountType === 'admin' && (
-                    <Button variant="success" onClick={handleOpenAdd}>
-                      <i className="bi bi-plus-circle me-2"></i>
-                      Add Book
-                    </Button>
-                  )}
-                </div>
-                <Row xs={1} sm={2} lg={3} xl={4} className="g-4">
-                  {filteredBooks.map(renderBookCard)}
-                </Row>
-              </>
-            )}
-          </>
+                  <Row xs={1} sm={2} lg={3} xl={4} className="g-4">
+                    {filteredBooks.map(renderBookCard)}
+                  </Row>
+                </>
+              )}
+            </>
+          )
         )}
       </Container>
       {/* Edit Book Modal */}
