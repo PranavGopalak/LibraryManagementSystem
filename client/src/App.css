@@ -965,3 +965,41 @@ body.dark-mode .book-action-toggle:hover {
 body.dark-mode .checkout-bag-fab {
   box-shadow: 0 10px 20px rgba(0,0,0,0.35);
 }
+
+.settings-dropdown-menu {
+  z-index: 99999 !important;
+  position: absolute !important;
+}
+
+.settings-dropdown {
+  position: relative;
+}
+
+.settings-dropdown .dropdown-menu {
+  z-index: 99999 !important;
+  position: absolute !important;
+}
+
+.dropdown-menu.settings-dropdown-menu {
+  z-index: 99999 !important;
+  position: absolute !important;
+  transform: translateZ(0) !important;
+  will-change: transform !important;
+}
+
+.navbar .dropdown-menu,
+#settings-dropdown + .dropdown-menu {
+  z-index: 1100;
+}
+
+.navbar {
+  z-index: 1000;
+}
+
+/* Force settings dropdown to appear on top */
+.settings-dropdown.show .dropdown-menu {
+  z-index: 99999 !important;
+  position: absolute !important;
+  transform: translateZ(0) !important;
+  will-change: transform !important;
+}

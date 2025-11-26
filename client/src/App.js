@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 
 import './App.css';
-import { Navbar, Container, Row, Col, Card, Button, Nav, Dropdown, Form, InputGroup, Badge, Modal } from 'react-bootstrap';
+import { Navbar, Container, Row, Col, Card, Button, Nav, Dropdown, Form, InputGroup, Badge, Modal, Table } from 'react-bootstrap';
 import { signup as apiSignup, login as apiLogin, storeToken, clearToken as clearAuthToken, getToken } from './api/auth';
 import AdminDashboard from './app/admin/page';
 import AdminBooksPage from './app/admin/books/page';
@@ -43,6 +43,49 @@ function App() {
   const [returnBookId, setReturnBookId] = useState(null);
   const [adminView, setAdminView] = useState('dashboard'); // 'dashboard' or 'books'
   const [adminBooksRefreshKey, setAdminBooksRefreshKey] = useState(0);
+  const [checkoutHistory, setCheckoutHistory] = useState([
+    {
+      id: 1,
+      bookTitle: 'The Pragmatic Programmer',
+      patronName: 'Alice Johnson',
+      checkoutDate: '2024-01-08T10:15:00.000Z',
+      dueDate: '2024-01-22T10:15:00.000Z',
+      status: 'returned',
+    },
+    {
+      id: 2,
+      bookTitle: 'Clean Code',
+      patronName: 'Henry Taylor',
+      checkoutDate: '2024-01-11T14:45:00.000Z',
+      dueDate: '2024-01-25T14:45:00.000Z',
+      status: 'checked_out',
+    },
+    {
+      id: 3,
+      bookTitle: 'Refactoring',
+      patronName: 'Grace Lee',
+      checkoutDate: '2024-01-05T09:20:00.000Z',
+      dueDate: '2024-01-19T09:20:00.000Z',
+      status: 'overdue',
+    },
+    {
+      id: 4,
+      bookTitle: 'Design Patterns',
+      patronName: 'Frank Miller',
+      checkoutDate: '2024-01-14T16:05:00.000Z',
+      dueDate: '2024-01-28T16:05:00.000Z',
+      status: 'checked_out',
+    },
+    {
+      id: 5,
+      bookTitle: 'Introduction to Algorithms',
+      patronName: 'Emma Brown',
+      checkoutDate: '2024-01-02T11:40:00.000Z',
+      dueDate: '2024-01-16T11:40:00.000Z',
+      status: 'returned',
+    },
+  ]);
+  const [showCheckoutHistoryModal, setShowCheckoutHistoryModal] = useState(false);
   // Expose functions for admin dashboard
   const handleOpenAddModal = () => setShowAddModal(true);
   const handleOpenEditModal = (book) => {
@@ -228,11 +271,6 @@ function App() {
     setEditingBook(null);
   };
 
-  const handleOpenAdd = () => {
-    setNewBook({ title: '', author: '', isbn: '', description: '', page_count: 0, copies: 1 });
-    setShowAddModal(true);
-  };
-
   const handleCloseAdd = () => {
     setShowAddModal(false);
   };
@@ -296,6 +334,13 @@ function App() {
     return found ? new Date(found.checkoutDate).toLocaleDateString() : null;
   };
 
+  const formatDateTime = (value) => {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+  };
+
   // Mock genres for demonstration
   const genres = ['all', 'Science Fiction', 'Fantasy', 'Mystery', 'Romance', 'Non-Fiction'];
 
@@ -304,7 +349,7 @@ function App() {
       <Card className="h-100 book-card">
         {accountType === 'admin' && (
           <div className="book-actions">
-            <Dropdown align="end">
+            <Dropdown align="end" className="settings-dropdown">
               <Dropdown.Toggle variant="link" className="book-action-toggle" no-caret>
                 <i className="bi bi-three-dots-vertical"></i>
               </Dropdown.Toggle>
@@ -435,46 +480,6 @@ function App() {
     </div>
   );
 
-  const renderStats = () => (
-    <div className="stats-section mb-5">
-      <Row className="g-3">
-        <Col xs={12} sm={4}>
-          <Card className="stat-card text-center">
-            <Card.Body>
-              <div className="stat-icon mb-2">
-                <i className="bi bi-book text-primary" style={{ fontSize: '2rem' }}></i>
-              </div>
-              <h4 className="stat-number">{books.length}</h4>
-              <p className="stat-label text-muted mb-0">Total Books</p>
-            </Card.Body>
-          </Card>
-        </Col>
-        <Col xs={12} sm={4}>
-          <Card className="stat-card text-center">
-            <Card.Body>
-              <div className="stat-icon mb-2">
-                <i className="bi bi-check-circle text-success" style={{ fontSize: '2rem' }}></i>
-              </div>
-              <h4 className="stat-number">{books.filter(b => b.copies > 0).length}</h4>
-              <p className="stat-label text-muted mb-0">Available</p>
-            </Card.Body>
-          </Card>
-        </Col>
-        <Col xs={12} sm={4}>
-          <Card className="stat-card text-center">
-            <Card.Body>
-              <div className="stat-icon mb-2">
-                <i className="bi bi-x-circle text-danger" style={{ fontSize: '2rem' }}></i>
-              </div>
-              <h4 className="stat-number">{books.filter(b => b.copies === 0).length}</h4>
-              <p className="stat-label text-muted mb-0">Out of Stock</p>
-            </Card.Body>
-          </Card>
-        </Col>
-      </Row>
-    </div>
-  );
-
   const renderLoadingState = () => (
     <Row className="g-4">
       {[1, 2, 3, 4, 5, 6].map(i => (
@@ -556,20 +561,24 @@ function App() {
         return;
       }
       const responses = await Promise.all(
-        checkoutBag.map(item =>
+        checkoutBag.map((item) =>
           fetch('/api/patron/checkout', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ bookId: item.id })
+            body: JSON.stringify({ bookId: item.id }),
           })
         )
       );
 
       const errors = [];
-      for (const r of responses) {
+      const successfulItems = [];
+      for (let i = 0; i < responses.length; i += 1) {
+        const r = responses[i];
         if (!r.ok) {
           const msg = await r.text();
           errors.push(msg || 'Checkout failed for one item.');
+        } else {
+          successfulItems.push(checkoutBag[i]);
         }
       }
 
@@ -597,6 +606,21 @@ function App() {
         alert(errors[0]);
       } else {
         alert('Checkout successful!');
+        if (successfulItems.length) {
+          const now = Date.now();
+          const twoWeeks = 14 * 24 * 60 * 60 * 1000;
+          const patronName = localStorage.getItem('username') || username || 'Patron';
+          const newEntries = successfulItems.map((item, index) => ({
+            id: now + index,
+            bookId: item.id,
+            bookTitle: item.title,
+            patronName,
+            checkoutDate: new Date(now + index * 1000).toISOString(),
+            dueDate: new Date(now + twoWeeks + index * 1000).toISOString(),
+            status: 'checked_out',
+          }));
+          setCheckoutHistory((prev) => [...newEntries, ...prev]);
+        }
       }
 
       setCheckoutBag([]);
@@ -674,11 +698,11 @@ function App() {
             Chico Library
           </Navbar.Brand>
           <Nav className="ms-auto align-items-center">
-            <Dropdown align="end">
+            <Dropdown align="end" className="settings-dropdown" popperConfig={{ strategy: 'fixed' }}>
               <Dropdown.Toggle variant={darkMode ? 'outline-light' : 'outline-dark'} id="settings-dropdown">
                 <i className="bi bi-gear me-2"></i>Settings
               </Dropdown.Toggle>
-              <Dropdown.Menu>
+              <Dropdown.Menu className="settings-dropdown-menu" style={{ zIndex: 99999 }}>
                 <Dropdown.Item onClick={() => setDarkMode(v => !v)}>
                   <i className={`bi ${darkMode ? 'bi-sun' : 'bi-moon'} me-2`}></i>
                   {darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
@@ -826,6 +850,8 @@ function App() {
                 onAddBook={handleOpenAddModal}
                 onEditBook={handleOpenEditModal}
                 onViewBooks={() => setAdminView('books')}
+                checkoutHistory={checkoutHistory}
+                onViewCheckoutHistory={() => setShowCheckoutHistoryModal(true)}
               />
             ) : (
               <AdminBooksPage
@@ -1161,6 +1187,73 @@ function App() {
           <Button variant="danger" onClick={confirmReturnRequest}>
             <i className="bi bi-arrow-counterclockwise me-2"></i>
             Confirm Return
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Checkout History Modal */}
+      <Modal
+        show={showCheckoutHistoryModal}
+        onHide={() => setShowCheckoutHistoryModal(false)}
+        size="lg"
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>Checkout History</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <div className="table-responsive">
+            <Table hover>
+              <thead>
+                <tr>
+                  <th>Book</th>
+                  <th>Patron</th>
+                  <th>Checked Out</th>
+                  <th>Due</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {checkoutHistory.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="text-center text-muted py-4">
+                      No checkout history yet.
+                    </td>
+                  </tr>
+                ) : (
+                  checkoutHistory.map((entry) => (
+                    <tr key={entry.id}>
+                      <td>{entry.bookTitle}</td>
+                      <td>{entry.patronName}</td>
+                      <td>{formatDateTime(entry.checkoutDate)}</td>
+                      <td>{formatDateTime(entry.dueDate)}</td>
+                      <td>
+                        <Badge
+                          bg={
+                            entry.status === 'checked_out'
+                              ? 'primary'
+                              : entry.status === 'returned'
+                                ? 'success'
+                                : 'danger'
+                          }
+                        >
+                          {entry.status === 'checked_out'
+                            ? 'Checked Out'
+                            : entry.status === 'returned'
+                              ? 'Returned'
+                              : 'Overdue'}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </Table>
+          </div>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowCheckoutHistoryModal(false)}>
+            Close
           </Button>
         </Modal.Footer>
       </Modal>

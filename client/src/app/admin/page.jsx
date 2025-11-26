@@ -8,16 +8,15 @@ import {
   Badge,
   ProgressBar,
   Alert,
-  ListGroup,
   Dropdown,
-  Spinner
+  Spinner,
+  Table
 } from 'react-bootstrap';
 
-function AdminDashboard({ onAddBook, onEditBook, onViewBooks }) {
+function AdminDashboard({ onAddBook, onEditBook, onViewBooks, checkoutHistory, onViewCheckoutHistory }) {
   const [books, setBooks] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  const [recentActivity, setRecentActivity] = useState([]);
   const [systemStats, setSystemStats] = useState({
     totalPatrons: 0,
     activeUsers: 0,
@@ -36,11 +35,7 @@ function AdminDashboard({ onAddBook, onEditBook, onViewBooks }) {
       const booksData = await booksResponse.json();
       setBooks(booksData);
 
-      // Simulate additional data (in real app, these would be separate API calls)
-      // For now, we'll generate some mock data based on the books
-      setRecentActivity(generateMockActivity(booksData));
       setSystemStats(generateMockStats(booksData));
-
     } catch (err) {
       console.error('Dashboard fetch error:', err);
       setError('Failed to load dashboard data');
@@ -52,31 +47,6 @@ function AdminDashboard({ onAddBook, onEditBook, onViewBooks }) {
   useEffect(() => {
     fetchDashboardData();
   }, [fetchDashboardData]);
-
-  const generateMockActivity = (booksData) => {
-    // Mock recent activity - in real app this would come from audit logs
-    const activities = [];
-    const now = new Date();
-    const activityTypes = ['checkout', 'return', 'added', 'updated'];
-    const userNames = ['Alice Johnson', 'Bob Smith', 'Carol Davis', 'David Wilson', 'Emma Brown', 'Frank Miller', 'Grace Lee', 'Henry Taylor'];
-
-    // Generate activities for the last 48 hours
-    booksData.slice(0, Math.min(8, booksData.length)).forEach((book, index) => {
-      const hoursAgo = Math.floor(Math.random() * 48);
-      const activityTime = new Date(now.getTime() - (hoursAgo * 60 * 60 * 1000));
-
-      activities.push({
-        id: index + 1,
-        type: activityTypes[Math.floor(Math.random() * activityTypes.length)],
-        book: book.title.length > 30 ? book.title.substring(0, 30) + '...' : book.title,
-        user: userNames[Math.floor(Math.random() * userNames.length)],
-        timestamp: activityTime,
-        copies: book.copies
-      });
-    });
-
-    return activities.sort((a, b) => b.timestamp - a.timestamp);
-  };
 
   const generateMockStats = (booksData) => {
     const totalBooks = booksData.length;
@@ -135,35 +105,40 @@ function AdminDashboard({ onAddBook, onEditBook, onViewBooks }) {
     .sort(([,a], [,b]) => b - a)
     .slice(0, 5);
 
-  const formatActivityTime = (timestamp) => {
-    const now = new Date();
-    const diff = now - timestamp;
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-
-    if (hours < 1) return 'Just now';
-    if (hours < 24) return `${hours}h ago`;
-    return `${Math.floor(hours / 24)}d ago`;
+  const formatDateTime = (value) => {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date);
   };
 
-  const getActivityIcon = (type) => {
-    switch (type) {
-      case 'checkout': return 'bi-arrow-right-circle text-primary';
-      case 'return': return 'bi-arrow-left-circle text-success';
-      case 'added': return 'bi-plus-circle text-info';
-      case 'updated': return 'bi-pencil-square text-warning';
-      default: return 'bi-circle text-muted';
+  const formatHistoryStatusLabel = (status) => {
+    switch (status) {
+      case 'checked_out':
+        return 'Checked Out';
+      case 'returned':
+        return 'Returned';
+      case 'overdue':
+        return 'Overdue';
+      default:
+        return 'Status';
     }
   };
 
-  const getActivityColor = (type) => {
-    switch (type) {
-      case 'checkout': return 'primary';
-      case 'return': return 'success';
-      case 'added': return 'info';
-      case 'updated': return 'warning';
-      default: return 'secondary';
+  const getHistoryStatusVariant = (status) => {
+    switch (status) {
+      case 'checked_out':
+        return 'primary';
+      case 'returned':
+        return 'success';
+      case 'overdue':
+        return 'danger';
+      default:
+        return 'secondary';
     }
   };
+
+  const limitedCheckoutHistory = Array.isArray(checkoutHistory) ? checkoutHistory.slice(0, 5) : [];
 
   if (isLoading) {
     return (
@@ -354,49 +329,61 @@ function AdminDashboard({ onAddBook, onEditBook, onViewBooks }) {
         </Col>
       </Row>
 
-      {/* Recent Activity and System Status */}
-      <Row>
-        <Col lg={8}>
+      {/* Checkout History Table */}
+      <Row className="mb-4">
+        <Col lg={12}>
           <Card>
             <Card.Header className="d-flex justify-content-between align-items-center">
-              <h5 className="mb-0">Recent Activity</h5>
-              <Button variant="link" size="sm">View All</Button>
+              <h5 className="mb-0">Checkout History</h5>
+              <Button variant="link" size="sm" onClick={onViewCheckoutHistory}>
+                View All
+              </Button>
             </Card.Header>
             <Card.Body className="p-0">
-              <ListGroup variant="flush">
-                {recentActivity.slice(0, 10).map((activity) => (
-                  <ListGroup.Item key={activity.id} className="d-flex align-items-center py-3">
-                    <div className="me-3">
-                      <i className={`bi ${getActivityIcon(activity.type)} fs-5`}></i>
-                    </div>
-                    <div className="flex-grow-1">
-                      <div className="d-flex justify-content-between align-items-start">
-                        <div>
-                          <strong className="text-truncate d-block" style={{ maxWidth: '200px' }}>
-                            {activity.book}
-                          </strong>
-                          <small className="text-muted">
-                            {activity.type} by {activity.user}
-                          </small>
-                        </div>
-                        <div className="text-end">
-                          <Badge bg={getActivityColor(activity.type)} className="mb-1">
-                            {activity.type}
-                          </Badge>
-                          <br />
-                          <small className="text-muted">
-                            {formatActivityTime(activity.timestamp)}
-                          </small>
-                        </div>
-                      </div>
-                    </div>
-                  </ListGroup.Item>
-                ))}
-              </ListGroup>
+              <div className="table-responsive">
+                <Table hover className="mb-0">
+                  <thead className="table-light">
+                    <tr>
+                      <th>Book</th>
+                      <th>Patron</th>
+                      <th>Checked Out</th>
+                      <th>Due</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {limitedCheckoutHistory.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="text-center text-muted py-4">
+                          No checkout history yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      limitedCheckoutHistory.map((entry) => (
+                        <tr key={entry.id}>
+                          <td>{entry.bookTitle}</td>
+                          <td>{entry.patronName}</td>
+                          <td>{formatDateTime(entry.checkoutDate)}</td>
+                          <td>{formatDateTime(entry.dueDate)}</td>
+                          <td>
+                            <Badge bg={getHistoryStatusVariant(entry.status)}>
+                              {formatHistoryStatusLabel(entry.status)}
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </Table>
+              </div>
             </Card.Body>
           </Card>
         </Col>
-        <Col lg={4}>
+      </Row>
+
+      {/* System Status */}
+      <Row>
+        <Col lg={12}>
           <Card>
             <Card.Header>
               <h5 className="mb-0">System Status</h5>
