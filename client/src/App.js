@@ -118,13 +118,20 @@ function App() {
             // Set checkout history with returned items, mapped to expected format
             const returnedCheckouts = data.filter(c => c.returnDate)
               .sort((a, b) => new Date(b.returnDate) - new Date(a.returnDate)) // Sort by most recent return first
-              .map(checkout => ({
-                id: checkout.id,
-                bookTitle: books.find(b => b.id === checkout.bookId)?.title || `Book #${checkout.bookId}`,
-                checkoutDate: checkout.checkoutDate,
-                dueDate: checkout.dueDate,
-                returnDate: checkout.returnDate
-              }));
+              .map(checkout => {
+                // Calculate due date as 1 year from checkout date (dummy date for display)
+                const checkoutDate = new Date(checkout.checkoutDate);
+                const dueDate = new Date(checkoutDate);
+                dueDate.setFullYear(dueDate.getFullYear() + 1);
+
+                return {
+                  id: checkout.id,
+                  bookTitle: books.find(b => b.id === checkout.bookId)?.title || `Book #${checkout.bookId}`,
+                  checkoutDate: checkout.checkoutDate,
+                  dueDate: dueDate.toISOString(),
+                  returnDate: checkout.returnDate
+                };
+              });
             console.log('Checkout history:', returnedCheckouts);
             setCheckoutHistory(returnedCheckouts);
           } else {
@@ -554,7 +561,7 @@ function App() {
       // Optimistic UI updates - update immediately for better UX
       const successfulItems = [...checkoutBag]; // Assume all will succeed initially
       const now = Date.now();
-      const twoWeeks = 14 * 24 * 60 * 60 * 1000;
+      const oneYear = 365 * 24 * 60 * 60 * 1000; // 1 year in milliseconds
 
       // Immediately update book availability
       setBooks(prevBooks =>
@@ -570,7 +577,7 @@ function App() {
         id: `temp-${now + index}`,
         bookId: item.id,
         checkoutDate: new Date(now + index * 1000).toISOString(),
-        dueDate: new Date(now + twoWeeks + index * 1000).toISOString(),
+        dueDate: new Date(now + oneYear + index * 1000).toISOString(),
         returnDate: null,
         title: item.title,
         author: item.author
@@ -1157,7 +1164,11 @@ function App() {
                             <div className="checkout-list">
                               {patronActiveCheckouts.map(co => {
                                 const book = books.find(b => b.id === co.bookId);
-                                const dueDate = new Date(co.dueDate);
+                                // Calculate due date as 1 year from checkout date (dummy date for display)
+                                const checkoutDate = new Date(co.checkoutDate);
+                                const dueDate = new Date(checkoutDate);
+                                dueDate.setFullYear(dueDate.getFullYear() + 1);
+
                                 const now = new Date();
                                 const diffTime = dueDate - now;
                                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
