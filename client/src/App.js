@@ -529,11 +529,18 @@ function App() {
       alert('You can only check out 1 copy of each book.');
       return;
     }
-    setCheckoutBag([...checkoutBag, book]);
+
+    // Optimistic update - immediately add to bag
+    setCheckoutBag(prev => [...prev, book]);
+    console.log(`Book "${book.title}" added to checkout bag`);
   };
 
   const removeFromBag = (id) => {
-    setCheckoutBag(checkoutBag.filter(b => b.id !== id));
+    const bookToRemove = checkoutBag.find(b => b.id === id);
+    setCheckoutBag(prev => prev.filter(b => b.id !== id));
+    if (bookToRemove) {
+      console.log(`Book "${bookToRemove.title}" removed from checkout bag`);
+    }
   };
 
   const submitCheckout = async () => {
@@ -543,6 +550,38 @@ function App() {
         alert('Your session has expired. Please sign in again.');
         return;
       }
+
+      // Optimistic UI updates - update immediately for better UX
+      const successfulItems = [...checkoutBag]; // Assume all will succeed initially
+      const now = Date.now();
+      const twoWeeks = 14 * 24 * 60 * 60 * 1000;
+
+      // Immediately update book availability
+      setBooks(prevBooks =>
+        prevBooks.map(book =>
+          checkoutBag.some(item => item.id === book.id)
+            ? { ...book, copies: Math.max(0, book.copies - 1) }
+            : book
+        )
+      );
+
+      // Immediately add to active checkouts
+      const newActiveCheckouts = successfulItems.map((item, index) => ({
+        id: `temp-${now + index}`,
+        bookId: item.id,
+        checkoutDate: new Date(now + index * 1000).toISOString(),
+        dueDate: new Date(now + twoWeeks + index * 1000).toISOString(),
+        returnDate: null,
+        title: item.title,
+        author: item.author
+      }));
+      setPatronActiveCheckouts(prev => [...prev, ...newActiveCheckouts]);
+
+      // Close modal immediately
+      setCheckoutBag([]);
+      setShowBagModal(false);
+
+      // Now make the actual API calls
       const responses = await Promise.all(
         checkoutBag.map((item) =>
           fetch('/api/patron/checkout', {
@@ -555,70 +594,106 @@ function App() {
 
       console.log('Checkout responses:', responses);
       const errors = [];
-      const successfulItems = [];
+      const actuallySuccessful = [];
+
       for (let i = 0; i < responses.length; i += 1) {
         const r = responses[i];
         if (!r.ok) {
           const msg = await r.text();
           errors.push(msg || 'Checkout failed for one item.');
+          // Revert optimistic updates for failed items
+          setBooks(prevBooks =>
+            prevBooks.map(book =>
+              checkoutBag[i].id === book.id
+                ? { ...book, copies: book.copies + 1 }
+                : book
+            )
+          );
+          setPatronActiveCheckouts(prev =>
+            prev.filter(co => co.bookId !== checkoutBag[i].id || !co.id.toString().startsWith('temp-'))
+          );
         } else {
-          successfulItems.push(checkoutBag[i]);
+          actuallySuccessful.push(checkoutBag[i]);
         }
       }
 
-      // Always refetch books to reflect server-side stock after attempts
-      const resBooks = await fetch('/api/books');
+      // Refetch latest data from server to ensure consistency
+      const [resBooks, resCheckouts] = await Promise.all([
+        fetch('/api/books'),
+        accountType === 'patron' && isAuthed ?
+          fetch(`/api/patron/checkouts/${localStorage.getItem('user_id')}`) :
+          Promise.resolve(null)
+      ]);
+
       if (resBooks.ok) {
         const data = await resBooks.json();
         setBooks(data);
         setFilteredBooks(data);
       }
 
-      // Refetch patron active checkouts and trigger history refresh
-      if (accountType === 'patron' && isAuthed) {
-        const storedUserId = Number(localStorage.getItem('user_id'));
-        if (storedUserId) {
-          const res = await fetch(`/api/patron/checkouts/${storedUserId}`);
-          if (res.ok) {
-            const data = await res.json();
-            setPatronActiveCheckouts(data.filter(c => !c.returnDate));
-            // Trigger refresh of checkout history
-            setCheckoutRefreshKey(prev => prev + 1);
-          }
-        }
+      if (resCheckouts && resCheckouts.ok) {
+        const data = await resCheckouts.json();
+        setPatronActiveCheckouts(data.filter(c => !c.returnDate));
+        setCheckoutRefreshKey(prev => prev + 1);
       }
 
       if (errors.length) {
-        alert(errors[0]);
+        alert(`Some checkouts failed:\n${errors.join('\n')}`);
       } else {
-        alert('Checkout successful!');
-        if (successfulItems.length) {
-          const now = Date.now();
-          const twoWeeks = 14 * 24 * 60 * 60 * 1000;
-          const patronName = localStorage.getItem('username') || username || 'Patron';
-          const newEntries = successfulItems.map((item, index) => ({
-            id: now + index,
-            bookId: item.id,
-            bookTitle: item.title,
-            patronName,
-            checkoutDate: new Date(now + index * 1000).toISOString(),
-            dueDate: new Date(now + twoWeeks + index * 1000).toISOString(),
-            status: 'checked_out',
-          }));
-          setCheckoutHistory((prev) => [...newEntries, ...prev]);
-        }
+        console.log('All checkouts successful!');
       }
 
+    } catch (e) {
+      console.error('Checkout error:', e);
+      alert('An error occurred during checkout.');
+
+      // Revert all optimistic updates on error
+      setBooks(prevBooks =>
+        prevBooks.map(book =>
+          checkoutBag.some(item => item.id === book.id)
+            ? { ...book, copies: book.copies + 1 }
+            : book
+        )
+      );
+      setPatronActiveCheckouts(prev =>
+        prev.filter(co => !co.id.toString().startsWith('temp-'))
+      );
       setCheckoutBag([]);
       setShowBagModal(false);
-    } catch (e) {
-      console.error(e);
-      alert('An error occurred during checkout.');
     }
   };
 
   const handleReturnBook = async (bookId) => {
     if (accountType !== 'patron') return;
+
+    // Optimistic UI updates - update immediately
+    const checkoutToReturn = patronActiveCheckouts.find(co => co.bookId === bookId);
+    if (checkoutToReturn) {
+      // Immediately increase book availability
+      setBooks(prevBooks =>
+        prevBooks.map(book =>
+          book.id === bookId
+            ? { ...book, copies: book.copies + 1 }
+            : book
+        )
+      );
+
+      // Immediately remove from active checkouts
+      setPatronActiveCheckouts(prev =>
+        prev.filter(co => co.bookId !== bookId)
+      );
+
+      // Immediately add to checkout history
+      const returnedEntry = {
+        id: checkoutToReturn.id,
+        bookTitle: checkoutToReturn.title,
+        checkoutDate: checkoutToReturn.checkoutDate,
+        dueDate: checkoutToReturn.dueDate,
+        returnDate: new Date().toISOString()
+      };
+      setCheckoutHistory(prev => [returnedEntry, ...prev.filter(entry => entry.id !== checkoutToReturn.id)]);
+    }
+
     try {
       const token = getToken();
       if (!token) {
@@ -633,10 +708,23 @@ function App() {
       if (!res.ok) {
         const msg = await res.text();
         console.error('Return failed:', msg);
+        // Revert optimistic updates on failure
+        if (checkoutToReturn) {
+          setBooks(prevBooks =>
+            prevBooks.map(book =>
+              book.id === bookId
+                ? { ...book, copies: book.copies - 1 }
+                : book
+            )
+          );
+          setPatronActiveCheckouts(prev => [...prev, checkoutToReturn]);
+          setCheckoutHistory(prev => prev.filter(entry => entry.id !== checkoutToReturn.id));
+        }
         return;
       }
       console.log('Book return successful for bookId:', bookId);
-      // Refresh books and patron active checkouts
+
+      // Refetch latest data from server to ensure consistency
       const [resBooks, resCheckouts] = await Promise.all([
         fetch('/api/books'),
         (async () => {
@@ -645,6 +733,7 @@ function App() {
           return fetch(`/api/patron/checkouts/${storedUserId}`);
         })()
       ]);
+
       if (resBooks.ok) {
         const data = await resBooks.json();
         setBooks(data);
@@ -653,11 +742,22 @@ function App() {
       if (resCheckouts && resCheckouts.ok) {
         const data = await resCheckouts.json();
         setPatronActiveCheckouts(data.filter(c => !c.returnDate));
-        // Trigger refresh of checkout history
         setCheckoutRefreshKey(prev => prev + 1);
       }
     } catch (e) {
       console.error('An error occurred while returning the book.', e);
+      // Revert optimistic updates on error
+      if (checkoutToReturn) {
+        setBooks(prevBooks =>
+          prevBooks.map(book =>
+            book.id === bookId
+              ? { ...book, copies: book.copies - 1 }
+              : book
+          )
+        );
+        setPatronActiveCheckouts(prev => [...prev, checkoutToReturn]);
+        setCheckoutHistory(prev => prev.filter(entry => entry.id !== checkoutToReturn.id));
+      }
     }
   };
 
