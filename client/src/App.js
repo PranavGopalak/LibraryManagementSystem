@@ -42,6 +42,7 @@ function App() {
   const [showReturnConfirm, setShowReturnConfirm] = useState(false);
   const [returnBookId, setReturnBookId] = useState(null);
   const [adminView, setAdminView] = useState('dashboard'); // 'dashboard' or 'books'
+  const [adminBooksRefreshKey, setAdminBooksRefreshKey] = useState(0);
   // Expose functions for admin dashboard
   const handleOpenAddModal = () => setShowAddModal(true);
   const handleOpenEditModal = (book) => {
@@ -261,6 +262,7 @@ function App() {
       setFilteredBooks(updated);
       setShowAddModal(false);
       setNewBook({ title: '', author: '', isbn: '', description: '', page_count: 0, copies: 1 });
+      setAdminBooksRefreshKey((prev) => prev + 1);
     } catch (err) {
       console.error('Create book error:', err);
       // Optionally surface an alert/toast in future
@@ -830,6 +832,7 @@ function App() {
                 onAddBook={handleOpenAddModal}
                 onEditBook={handleOpenEditModal}
                 onBackToDashboard={() => setAdminView('dashboard')}
+                refreshKey={adminBooksRefreshKey}
               />
             )
           ) : (

@@ -282,9 +282,9 @@ function AdminDashboard({ onAddBook, onEditBook, onViewBooks }) {
         </Col>
       </Row>
 
-      {/* System Overview */}
+      {/* System Overview + Quick Actions */}
       <Row className="mb-4">
-        <Col lg={8}>
+        <Col lg={8} className="mb-3 mb-lg-0">
           <Card>
             <Card.Header>
               <h5 className="mb-0">System Overview</h5>
@@ -327,10 +327,34 @@ function AdminDashboard({ onAddBook, onEditBook, onViewBooks }) {
             </Card.Body>
           </Card>
         </Col>
-
+        <Col lg={4}>
+          <Card className="h-100">
+            <Card.Header>
+              <h5 className="mb-0">Quick Actions</h5>
+            </Card.Header>
+            <Card.Body className="d-grid gap-3">
+              <Button
+                variant="outline-primary"
+                className="d-flex align-items-center justify-content-center"
+                onClick={onViewBooks}
+              >
+                <i className="bi bi-journal-text me-2"></i>
+                View All Books
+              </Button>
+              <Button
+                variant="primary"
+                className="d-flex align-items-center justify-content-center"
+                onClick={onAddBook}
+              >
+                <i className="bi bi-plus-circle me-2"></i>
+                Add New Book
+              </Button>
+            </Card.Body>
+          </Card>
+        </Col>
       </Row>
 
-      {/* Recent Activity and Quick Actions */}
+      {/* Recent Activity and System Status */}
       <Row>
         <Col lg={8}>
           <Card>
@@ -372,48 +396,7 @@ function AdminDashboard({ onAddBook, onEditBook, onViewBooks }) {
             </Card.Body>
           </Card>
         </Col>
-
         <Col lg={4}>
-          <Card className="mb-3">
-            <Card.Header>
-              <h5 className="mb-0">Quick Actions</h5>
-            </Card.Header>
-            <Card.Body className="d-grid gap-2">
-              <Button
-                variant="primary"
-                className="d-flex align-items-center"
-                onClick={onAddBook}
-              >
-                <i className="bi bi-plus-circle me-2"></i>
-                Add New Book
-              </Button>
-              <Button
-                variant="outline-primary"
-                className="d-flex align-items-center"
-                onClick={() => {
-                  // Find a random book to edit as demo
-                  const randomBook = books[Math.floor(Math.random() * books.length)];
-                  if (randomBook) onEditBook(randomBook);
-                }}
-              >
-                <i className="bi bi-pencil me-2"></i>
-                Edit Random Book
-              </Button>
-              <Button variant="outline-success" className="d-flex align-items-center">
-                <i className="bi bi-graph-up me-2"></i>
-                View Reports
-              </Button>
-              <Button variant="outline-warning" className="d-flex align-items-center">
-                <i className="bi bi-exclamation-triangle me-2"></i>
-                Low Stock Alert
-              </Button>
-              <Button variant="outline-info" className="d-flex align-items-center">
-                <i className="bi bi-people me-2"></i>
-                Manage Patrons
-              </Button>
-            </Card.Body>
-          </Card>
-
           <Card>
             <Card.Header>
               <h5 className="mb-0">System Status</h5>

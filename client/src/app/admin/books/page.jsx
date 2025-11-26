@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import ConfirmDelete from '../../../components/admin/ConfirmDelete';
 import toast from 'react-hot-toast';
 import {
@@ -24,24 +23,17 @@ import {
   formatUpdatedAt,
 } from '../../../lib/books';
 import {
+  ADMIN_DEFAULT_STATE,
   clampPage,
-  parseAdminUrlState,
-  serializeAdminUrlState,
   VALID_PAGE_SIZES,
 } from '../../../lib/urlState';
 
-function AdminBooksPage({ onAddBook, onEditBook, onBackToDashboard }) {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const urlState = useMemo(() => parseAdminUrlState(searchParams), [searchParams]);
+function AdminBooksPage({ onAddBook, onEditBook, onBackToDashboard, refreshKey }) {
+  const [urlState, setUrlState] = useState(ADMIN_DEFAULT_STATE);
 
-  const updateUrlState = useCallback(
-    (updates) => {
-      const nextState = { ...urlState, ...updates };
-      const params = serializeAdminUrlState(nextState);
-      setSearchParams(params, { replace: true });
-    },
-    [setSearchParams, urlState]
-  );
+  const updateUrlState = useCallback((updates) => {
+    setUrlState((prev) => ({ ...prev, ...updates }));
+  }, []);
 
   const [books, setBooks] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -50,8 +42,6 @@ function AdminBooksPage({ onAddBook, onEditBook, onBackToDashboard }) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [copiesDialog, setCopiesDialog] = useState({ show: false, id: null, title: '', copies: 0 });
   const [copiesSubmitting, setCopiesSubmitting] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-
 
   const fetchBooks = useCallback(async () => {
     let active = true;
@@ -86,15 +76,15 @@ function AdminBooksPage({ onAddBook, onEditBook, onBackToDashboard }) {
 
   useEffect(() => {
     fetchBooks();
-  }, [fetchBooks]);
+  }, [fetchBooks, refreshKey]);
 
   // Filter and sort books
   const filteredBooks = useMemo(() => {
     let filtered = books;
 
     // Search filter
-    if (searchTerm) {
-      const searchLower = searchTerm.toLowerCase();
+    if (urlState.search) {
+      const searchLower = urlState.search.toLowerCase();
       filtered = filtered.filter(
         (book) =>
           book.title.toLowerCase().includes(searchLower) ||
@@ -127,7 +117,7 @@ function AdminBooksPage({ onAddBook, onEditBook, onBackToDashboard }) {
     });
 
     return filtered;
-  }, [books, searchTerm, urlState.availability, urlState.sort]);
+  }, [books, urlState.search, urlState.availability, urlState.sort]);
 
   // Pagination
   const totalItems = filteredBooks.length;
@@ -387,7 +377,7 @@ function AdminBooksPage({ onAddBook, onEditBook, onBackToDashboard }) {
         <Card.Body>
           <Row className="g-3 align-items-end">
             <Col md={4}>
-              <Form.Group>
+          <Form.Group>
                 <Form.Label>Search</Form.Label>
                 <InputGroup>
                   <InputGroup.Text>
@@ -396,10 +386,9 @@ function AdminBooksPage({ onAddBook, onEditBook, onBackToDashboard }) {
                   <Form.Control
                     type="text"
                     placeholder="Title, author, or ISBN..."
-                    value={searchTerm}
+                  value={urlState.search}
                     onChange={(e) => {
-                      setSearchTerm(e.target.value);
-                      updateUrlState({ page: 1 });
+                  updateUrlState({ search: e.target.value, page: 1 });
                     }}
                   />
                 </InputGroup>
@@ -474,8 +463,8 @@ function AdminBooksPage({ onAddBook, onEditBook, onBackToDashboard }) {
       <div className="d-flex justify-content-between align-items-center mb-3">
         <div>
           <h5 className="mb-1">Books ({totalItems})</h5>
-          {searchTerm && (
-            <small className="text-muted">Results for "{searchTerm}"</small>
+          {urlState.search && (
+            <small className="text-muted">Results for "{urlState.search}"</small>
           )}
         </div>
         <div className="text-muted small">
@@ -490,7 +479,7 @@ function AdminBooksPage({ onAddBook, onEditBook, onBackToDashboard }) {
             <i className="bi bi-search display-1 text-muted mb-3"></i>
             <h5>No books found</h5>
             <p className="text-muted mb-3">
-              {searchTerm ? `No books match "${searchTerm}"` : 'Your library is empty'}
+              {urlState.search ? `No books match "${urlState.search}"` : 'Your library is empty'}
             </p>
             <Button variant="primary" onClick={onAddBook}>
               <i className="bi bi-plus-circle me-2"></i>
