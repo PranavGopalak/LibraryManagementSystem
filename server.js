@@ -319,20 +319,44 @@ app.delete('/api/books/:id', async (req, res) => {
 app.get('/api/patron/checkouts/:userId', async (req, res) => {
     try {
         const userId = parseInt(req.params.userId);
-        // Join active_checkouts with books to get book details
-        const sql = `
-            SELECT 
+
+        // Query active checkouts
+        const activeSql = `
+            SELECT
                 ac.id AS id,
                 ac.book_id AS bookId,
                 ac.checkout_date AS checkoutDate,
+                NULL AS returnDate,
                 b.title,
                 b.author
             FROM active_checkouts ac
             JOIN books b ON ac.book_id = b.id
             WHERE ac.user_id = ?
         `;
-        const [checkouts] = await pool.query(sql, [userId]);
-        res.json(checkouts);
+
+        // Query returned checkouts from history
+        const historySql = `
+            SELECT
+                ch.id AS id,
+                ch.book_id AS bookId,
+                ch.checkout_date AS checkoutDate,
+                ch.return_date AS returnDate,
+                b.title,
+                b.author
+            FROM checkout_history ch
+            JOIN books b ON ch.book_id = b.id
+            WHERE ch.user_id = ?
+        `;
+
+        const [activeCheckouts] = await pool.query(activeSql, [userId]);
+        const [returnedCheckouts] = await pool.query(historySql, [userId]);
+
+        // Combine both active and returned checkouts
+        const allCheckouts = [...activeCheckouts, ...returnedCheckouts];
+
+        console.log(`User ${userId} checkouts - Active: ${activeCheckouts.length}, Returned: ${returnedCheckouts.length}`);
+
+        res.json(allCheckouts);
     } catch (error) {
         console.error('Failed to fetch checkouts:', error);
         res.status(500).send('Error fetching checkouts from the database.');

@@ -44,48 +44,8 @@ function App() {
   const [adminView, setAdminView] = useState('dashboard'); // 'dashboard' or 'books'
   const [patronView, setPatronView] = useState('dashboard'); // 'dashboard' or 'books'
   const [adminBooksRefreshKey, setAdminBooksRefreshKey] = useState(0);
-  const [checkoutHistory, setCheckoutHistory] = useState([
-    {
-      id: 1,
-      bookTitle: 'The Pragmatic Programmer',
-      patronName: 'Alice Johnson',
-      checkoutDate: '2024-01-08T10:15:00.000Z',
-      dueDate: '2024-01-22T10:15:00.000Z',
-      status: 'returned',
-    },
-    {
-      id: 2,
-      bookTitle: 'Clean Code',
-      patronName: 'Henry Taylor',
-      checkoutDate: '2024-01-11T14:45:00.000Z',
-      dueDate: '2024-01-25T14:45:00.000Z',
-      status: 'checked_out',
-    },
-    {
-      id: 3,
-      bookTitle: 'Refactoring',
-      patronName: 'Grace Lee',
-      checkoutDate: '2024-01-05T09:20:00.000Z',
-      dueDate: '2024-01-19T09:20:00.000Z',
-      status: 'overdue',
-    },
-    {
-      id: 4,
-      bookTitle: 'Design Patterns',
-      patronName: 'Frank Miller',
-      checkoutDate: '2024-01-14T16:05:00.000Z',
-      dueDate: '2024-01-28T16:05:00.000Z',
-      status: 'checked_out',
-    },
-    {
-      id: 5,
-      bookTitle: 'Introduction to Algorithms',
-      patronName: 'Emma Brown',
-      checkoutDate: '2024-01-02T11:40:00.000Z',
-      dueDate: '2024-01-16T11:40:00.000Z',
-      status: 'returned',
-    },
-  ]);
+  const [checkoutHistory, setCheckoutHistory] = useState([]);
+  const [checkoutRefreshKey, setCheckoutRefreshKey] = useState(0);
   const [showCheckoutHistoryModal, setShowCheckoutHistoryModal] = useState(false);
   // Expose functions for admin dashboard
   const handleOpenAddModal = () => setShowAddModal(true);
@@ -144,20 +104,42 @@ function App() {
         try {
           const storedUserId = Number(localStorage.getItem('user_id'));
           if (!storedUserId) return;
+          console.log('Fetching patron checkouts for user:', storedUserId);
           const res = await fetch(`/api/patron/checkouts/${storedUserId}`);
           if (res.ok) {
             const data = await res.json();
-            setPatronActiveCheckouts(data.filter(c => !c.returnDate));
+            console.log('Raw checkout data:', data);
+
+            // Filter active checkouts (not returned)
+            const activeCheckouts = data.filter(c => !c.returnDate);
+            setPatronActiveCheckouts(activeCheckouts);
+            console.log('Active checkouts:', activeCheckouts);
+
+            // Set checkout history with returned items, mapped to expected format
+            const returnedCheckouts = data.filter(c => c.returnDate)
+              .sort((a, b) => new Date(b.returnDate) - new Date(a.returnDate)) // Sort by most recent return first
+              .map(checkout => ({
+                id: checkout.id,
+                bookTitle: books.find(b => b.id === checkout.bookId)?.title || `Book #${checkout.bookId}`,
+                checkoutDate: checkout.checkoutDate,
+                dueDate: checkout.dueDate,
+                returnDate: checkout.returnDate
+              }));
+            console.log('Checkout history:', returnedCheckouts);
+            setCheckoutHistory(returnedCheckouts);
+          } else {
+            console.error('Failed to fetch checkouts, status:', res.status);
           }
         } catch (e) {
           console.error('Failed to fetch patron checkouts', e);
         }
       } else {
         setPatronActiveCheckouts([]);
+        setCheckoutHistory([]);
       }
     };
     fetchPatronCheckouts();
-  }, [accountType, isAuthed]);
+  }, [accountType, isAuthed, books, checkoutRefreshKey]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -571,6 +553,7 @@ function App() {
         )
       );
 
+      console.log('Checkout responses:', responses);
       const errors = [];
       const successfulItems = [];
       for (let i = 0; i < responses.length; i += 1) {
@@ -591,7 +574,7 @@ function App() {
         setFilteredBooks(data);
       }
 
-      // Refetch patron active checkouts
+      // Refetch patron active checkouts and trigger history refresh
       if (accountType === 'patron' && isAuthed) {
         const storedUserId = Number(localStorage.getItem('user_id'));
         if (storedUserId) {
@@ -599,6 +582,8 @@ function App() {
           if (res.ok) {
             const data = await res.json();
             setPatronActiveCheckouts(data.filter(c => !c.returnDate));
+            // Trigger refresh of checkout history
+            setCheckoutRefreshKey(prev => prev + 1);
           }
         }
       }
@@ -650,6 +635,7 @@ function App() {
         console.error('Return failed:', msg);
         return;
       }
+      console.log('Book return successful for bookId:', bookId);
       // Refresh books and patron active checkouts
       const [resBooks, resCheckouts] = await Promise.all([
         fetch('/api/books'),
@@ -667,6 +653,8 @@ function App() {
       if (resCheckouts && resCheckouts.ok) {
         const data = await resCheckouts.json();
         setPatronActiveCheckouts(data.filter(c => !c.returnDate));
+        // Trigger refresh of checkout history
+        setCheckoutRefreshKey(prev => prev + 1);
       }
     } catch (e) {
       console.error('An error occurred while returning the book.', e);
@@ -1157,17 +1145,15 @@ function App() {
                             <div className="activity-list">
                               {checkoutHistory.slice(0, 3).map((entry, index) => (
                                 <div key={entry.id} className="d-flex align-items-center mb-2">
-                                  <div className={`activity-icon me-2 ${entry.returnDate ? 'text-success' : 'text-primary'
-                                    }`}>
-                                    <i className={`bi ${entry.returnDate ? 'bi-arrow-left-circle' : 'bi-arrow-right-circle'
-                                      }`}></i>
+                                  <div className="activity-icon me-2 text-success">
+                                    <i className="bi bi-arrow-left-circle"></i>
                                   </div>
                                   <div className="flex-grow-1">
                                     <small className="d-block fw-semibold text-truncate" style={{ maxWidth: '120px' }}>
                                       {entry.bookTitle}
                                     </small>
                                     <small className="text-muted">
-                                      {entry.returnDate ? 'Returned' : 'Checked out'} {new Date(entry.checkoutDate).toLocaleDateString()}
+                                      Returned {new Date(entry.returnDate).toLocaleDateString()}
                                     </small>
                                   </div>
                                 </div>
