@@ -1,5 +1,29 @@
 /* Enhanced Library Website Design System */
 
+/* Patron Dashboard Styles */
+.checkout-item {
+  transition: all 0.2s ease;
+}
+
+.checkout-item:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  border-color: var(--bs-primary);
+}
+
+.activity-icon {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background-color: rgba(0,0,0,0.05);
+}
+
+.activity-list .d-flex:last-child .mb-2 {
+  margin-bottom: 0 !important;
+}
+
 /* Import Google Fonts */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 

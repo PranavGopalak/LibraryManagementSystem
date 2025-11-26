@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 
 import './App.css';
-import { Navbar, Container, Row, Col, Card, Button, Nav, Dropdown, Form, InputGroup, Badge, Modal, Table } from 'react-bootstrap';
+import { Navbar, Container, Row, Col, Card, Button, Nav, Dropdown, Form, InputGroup, Badge, Modal, Table, ProgressBar, Alert } from 'react-bootstrap';
 import { signup as apiSignup, login as apiLogin, storeToken, clearToken as clearAuthToken, getToken } from './api/auth';
 import AdminDashboard from './app/admin/page';
 import AdminBooksPage from './app/admin/books/page';
@@ -42,6 +42,7 @@ function App() {
   const [showReturnConfirm, setShowReturnConfirm] = useState(false);
   const [returnBookId, setReturnBookId] = useState(null);
   const [adminView, setAdminView] = useState('dashboard'); // 'dashboard' or 'books'
+  const [patronView, setPatronView] = useState('dashboard'); // 'dashboard' or 'books'
   const [adminBooksRefreshKey, setAdminBooksRefreshKey] = useState(0);
   const [checkoutHistory, setCheckoutHistory] = useState([
     {
@@ -866,9 +867,14 @@ function App() {
               <div className="page-header mb-5">
                 <div className="d-flex justify-content-between align-items-center mb-4">
                   <div>
-                    <h1 className="page-title">Library Collection</h1>
+                    <h1 className="page-title">
+                      {patronView === 'dashboard' ? 'My Library Dashboard' : 'Library Collection'}
+                    </h1>
                     <p className="page-subtitle text-muted">
-                      Discover and explore our vast collection of books
+                      {patronView === 'dashboard'
+                        ? `Welcome back, ${username || 'Reader'}! Manage your books and discover new reads from our collection.`
+                        : 'Discover and explore our vast collection of books'
+                      }
                     </p>
                   </div>
                   <div className="page-actions">
@@ -880,66 +886,334 @@ function App() {
                 </div>
               </div>
 
-              <div className="patron-checkouts-section mb-5">
-                <Card className="stat-card">
-                  <Card.Body>
-                    <div className="d-flex justify-content-between align-items-center mb-3">
-                      <h5 className="mb-0">Your Active Checkouts</h5>
-                      <Badge bg={patronActiveCheckouts.length >= 3 ? 'danger' : 'secondary'}>
-                        {patronActiveCheckouts.length} / 3
-                      </Badge>
-                    </div>
-                    {patronActiveCheckouts.length === 0 ? (
-                      <p className="text-muted mb-0">You have no active checkouts.</p>
-                    ) : (
-                      <div className="list-group">
-                        {patronActiveCheckouts.map(co => {
-                          const book = books.find(b => b.id === co.bookId);
-                          return (
-                            <div key={co.id} className="list-group-item d-flex justify-content-between align-items-center">
-                              <div>
-                                <div className="fw-semibold">{book ? book.title : `Book #${co.bookId}`}</div>
-                                {book && <small className="text-muted">{book.author}</small>}
-                              </div>
-                              <div className="d-flex align-items-center">
-                                <small className="text-muted me-3">Checked out on {new Date(co.checkoutDate).toLocaleDateString()}</small>
-                                <Button
-                                  variant="outline-danger"
-                                  onClick={() => requestReturnBook(co.bookId)}
-                                  size="sm"
-                                >
-                                  <i className="bi bi-arrow-counterclockwise me-1"></i>
-                                  Return
-                                </Button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
+              {patronView === 'dashboard' ? (
+                <>
+                  {/* Dashboard Quick Actions */}
+                  <Row className="mb-4">
+                    <Col md={6} className="mb-3">
+                      <Card className="h-100">
+                        <Card.Body className="text-center p-4">
+                          <div className="mb-3">
+                            <i className="bi bi-journal-text display-5 text-primary"></i>
+                          </div>
+                          <h5 className="card-title">Browse Books</h5>
+                          <p className="text-muted">Explore our collection and find your next read</p>
+                          <Button
+                            variant="primary"
+                            onClick={() => setPatronView('books')}
+                            className="mt-3"
+                            size="lg"
+                          >
+                            <i className="bi bi-search me-2"></i>
+                            Browse Collection
+                          </Button>
+                        </Card.Body>
+                      </Card>
+                    </Col>
+                    <Col md={6} className="mb-3">
+                      <Card className="h-100">
+                        <Card.Body className="text-center p-4">
+                          <div className="mb-3">
+                            <i className="bi bi-info-circle display-5 text-info"></i>
+                          </div>
+                          <h5 className="card-title">Library Info</h5>
+                          <p className="text-muted">Learn about library policies and hours</p>
+                          <Button
+                            variant="outline-info"
+                            className="mt-3"
+                            size="lg"
+                            disabled
+                          >
+                            <i className="bi bi-info-circle me-2"></i>
+                            Coming Soon
+                          </Button>
+                        </Card.Body>
+                      </Card>
+                    </Col>
+                  </Row>
+
+                  {/* Dashboard Stats */}
+                  <Row className="mb-4">
+                    <Col lg={3} md={6} className="mb-3">
+                      <Card className="h-100">
+                        <Card.Body className="text-center">
+                          <div className="mb-3">
+                            <i className="bi bi-book-half display-4 text-primary"></i>
+                          </div>
+                          <h3 className="h2 mb-1">{patronActiveCheckouts.length}</h3>
+                          <p className="text-muted mb-2">Books Checked Out</p>
+                          <ProgressBar
+                            now={(patronActiveCheckouts.length / 3) * 100}
+                            variant={patronActiveCheckouts.length >= 3 ? 'danger' : 'primary'}
+                            className="mt-2"
+                            style={{ height: '6px' }}
+                          />
+                          <small className="text-muted mt-1 d-block">
+                            {3 - patronActiveCheckouts.length} more available
+                          </small>
+                        </Card.Body>
+                      </Card>
+                    </Col>
+
+                    <Col lg={3} md={6} className="mb-3">
+                      <Card className="h-100">
+                        <Card.Body className="text-center">
+                          <div className="mb-3">
+                            <i className="bi bi-collection display-4 text-info"></i>
+                          </div>
+                          <h3 className="h2 mb-1">{books.length}</h3>
+                          <p className="text-muted mb-2">Books in Library</p>
+                          <small className="text-muted">
+                            {books.filter(book => book.copies > 0).length} available now
+                          </small>
+                        </Card.Body>
+                      </Card>
+                    </Col>
+
+                    <Col lg={3} md={6} className="mb-3">
+                      <Card className="h-100">
+                        <Card.Body className="text-center">
+                          <div className="mb-3">
+                            <i className="bi bi-clock-history display-4 text-success"></i>
+                          </div>
+                          <h3 className="h2 mb-1">{checkoutHistory.length}</h3>
+                          <p className="text-muted mb-2">Total Checkouts</p>
+                          <small className="text-muted">
+                            Books you've borrowed
+                          </small>
+                        </Card.Body>
+                      </Card>
+                    </Col>
+
+                    <Col lg={3} md={6} className="mb-3">
+                      <Card className="h-100">
+                        <Card.Body className="text-center">
+                          <div className="mb-3">
+                            <i className="bi bi-calendar-event display-4 text-warning"></i>
+                          </div>
+                          <h3 className="h2 mb-1">
+                            {patronActiveCheckouts.filter(co => {
+                              const dueDate = new Date(co.dueDate);
+                              const now = new Date();
+                              const diffTime = dueDate - now;
+                              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                              return diffDays <= 7 && diffDays >= 0;
+                            }).length}
+                          </h3>
+                          <p className="text-muted mb-2">Due This Week</p>
+                          <small className="text-muted">
+                            Books due in 7 days
+                          </small>
+                        </Card.Body>
+                      </Card>
+                    </Col>
+                  </Row>
+
+                  {/* Due Date Alerts */}
+                  {patronActiveCheckouts.some(co => {
+                    const dueDate = new Date(co.dueDate);
+                    const now = new Date();
+                    const diffTime = dueDate - now;
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    return diffDays <= 3 && diffDays >= 0;
+                  }) && (
+                      <Alert variant="warning" className="mb-4">
+                        <Alert.Heading>
+                          <i className="bi bi-clock me-2"></i>
+                          Books Due Soon
+                        </Alert.Heading>
+                        <p className="mb-0">
+                          You have books due within the next 3 days. Please return them on time to avoid fines.
+                        </p>
+                      </Alert>
                     )}
-                  </Card.Body>
-                </Card>
-              </div>
 
-              {renderSearchAndFilters()}
+                  {/* Overdue Alerts */}
+                  {patronActiveCheckouts.some(co => {
+                    const dueDate = new Date(co.dueDate);
+                    const now = new Date();
+                    return dueDate < now;
+                  }) && (
+                      <Alert variant="danger" className="mb-4">
+                        <Alert.Heading>
+                          <i className="bi bi-exclamation-triangle me-2"></i>
+                          Overdue Books
+                        </Alert.Heading>
+                        <p className="mb-0">
+                          You have overdue books that need to be returned immediately.
+                        </p>
+                      </Alert>
+                    )}
 
-              {isLoading ? (
-                renderLoadingState()
-              ) : filteredBooks.length === 0 ? (
-                renderEmptyState()
+                  {/* Current Checkouts */}
+                  <Row className="mb-5">
+                    <Col lg={8} className="mb-4 mb-lg-0">
+                      <Card>
+                        <Card.Header>
+                          <div className="d-flex justify-content-between align-items-center">
+                            <h5 className="mb-0">Current Checkouts</h5>
+                            <Badge bg={patronActiveCheckouts.length >= 3 ? 'danger' : 'secondary'}>
+                              {patronActiveCheckouts.length} / 3 books
+                            </Badge>
+                          </div>
+                        </Card.Header>
+                        <Card.Body>
+                          {patronActiveCheckouts.length === 0 ? (
+                            <div className="text-center py-4">
+                              <i className="bi bi-book-half display-4 text-muted mb-3"></i>
+                              <h5 className="text-muted">No Active Checkouts</h5>
+                              <p className="text-muted mb-3">You haven't checked out any books yet.</p>
+                              <p className="text-muted small">Browse the collection below to find your next read!</p>
+                            </div>
+                          ) : (
+                            <div className="checkout-list">
+                              {patronActiveCheckouts.map(co => {
+                                const book = books.find(b => b.id === co.bookId);
+                                const dueDate = new Date(co.dueDate);
+                                const now = new Date();
+                                const diffTime = dueDate - now;
+                                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                const isOverdue = diffDays < 0;
+                                const isDueSoon = diffDays <= 3 && diffDays >= 0;
+
+                                return (
+                                  <div key={co.id} className="checkout-item mb-3 p-3 border rounded">
+                                    <div className="d-flex justify-content-between align-items-start">
+                                      <div className="flex-grow-1">
+                                        <h6 className="mb-1">{book ? book.title : `Book #${co.bookId}`}</h6>
+                                        {book && <small className="text-muted d-block mb-2">by {book.author}</small>}
+                                        <div className="d-flex align-items-center gap-3">
+                                          <small className="text-muted">
+                                            <i className="bi bi-calendar me-1"></i>
+                                            Checked out: {new Date(co.checkoutDate).toLocaleDateString()}
+                                          </small>
+                                          <Badge bg={
+                                            isOverdue ? 'danger' :
+                                              isDueSoon ? 'warning' :
+                                                'secondary'
+                                          }>
+                                            {isOverdue ? `${Math.abs(diffDays)} days overdue` :
+                                              isDueSoon ? `Due in ${diffDays} day${diffDays === 1 ? '' : 's'}` :
+                                                `Due: ${dueDate.toLocaleDateString()}`}
+                                          </Badge>
+                                        </div>
+                                      </div>
+                                      <Button
+                                        variant="outline-danger"
+                                        size="sm"
+                                        onClick={() => requestReturnBook(co.bookId)}
+                                      >
+                                        <i className="bi bi-arrow-left-circle me-1"></i>
+                                        Return
+                                      </Button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </Card.Body>
+                      </Card>
+                    </Col>
+
+                    <Col lg={4}>
+                      {/* Library Statistics */}
+                      <Card className="mb-4">
+                        <Card.Header>
+                          <h5 className="mb-0">Library Statistics</h5>
+                        </Card.Header>
+                        <Card.Body>
+                          <div className="mb-3">
+                            <div className="d-flex justify-content-between align-items-center mb-2">
+                              <span className="small">Total Books</span>
+                              <Badge bg="primary">{books.length}</Badge>
+                            </div>
+                            <div className="d-flex justify-content-between align-items-center mb-2">
+                              <span className="small">Available Now</span>
+                              <Badge bg="success">{books.filter(book => book.copies > 0).length}</Badge>
+                            </div>
+                            <div className="d-flex justify-content-between align-items-center mb-2">
+                              <span className="small">Checked Out</span>
+                              <Badge bg="warning">{books.reduce((sum, book) => sum + (book.copies - Math.max(0, book.copies - 1)), 0)}</Badge>
+                            </div>
+                            <div className="d-flex justify-content-between align-items-center">
+                              <span className="small">Your Checkouts</span>
+                              <Badge bg={patronActiveCheckouts.length >= 3 ? 'danger' : 'info'}>{patronActiveCheckouts.length}/3</Badge>
+                            </div>
+                          </div>
+                          <small className="text-muted">Real-time library data</small>
+                        </Card.Body>
+                      </Card>
+
+                      {/* Recent Activity */}
+                      <Card>
+                        <Card.Header>
+                          <h5 className="mb-0">Recent Activity</h5>
+                        </Card.Header>
+                        <Card.Body>
+                          {checkoutHistory.length === 0 ? (
+                            <p className="text-muted mb-0 small">No recent activity</p>
+                          ) : (
+                            <div className="activity-list">
+                              {checkoutHistory.slice(0, 3).map((entry, index) => (
+                                <div key={entry.id} className="d-flex align-items-center mb-2">
+                                  <div className={`activity-icon me-2 ${entry.returnDate ? 'text-success' : 'text-primary'
+                                    }`}>
+                                    <i className={`bi ${entry.returnDate ? 'bi-arrow-left-circle' : 'bi-arrow-right-circle'
+                                      }`}></i>
+                                  </div>
+                                  <div className="flex-grow-1">
+                                    <small className="d-block fw-semibold text-truncate" style={{ maxWidth: '120px' }}>
+                                      {entry.bookTitle}
+                                    </small>
+                                    <small className="text-muted">
+                                      {entry.returnDate ? 'Returned' : 'Checked out'} {new Date(entry.checkoutDate).toLocaleDateString()}
+                                    </small>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </Card.Body>
+                      </Card>
+                    </Col>
+                  </Row>
+                </>
               ) : (
                 <>
-                  <div className="books-grid-header mb-4 d-flex justify-content-between align-items-center">
-                    <div>
-                      <h2 className="h4 mb-0">Available Books</h2>
-                      <p className="text-muted mb-0">
-                        Showing {filteredBooks.length} of {books.length} books
-                      </p>
-                    </div>
+                  {/* Book Browsing View */}
+                  <div className="mb-4">
+                    <Button
+                      variant="outline-secondary"
+                      onClick={() => setPatronView('dashboard')}
+                      className="mb-4"
+                    >
+                      <i className="bi bi-arrow-left me-2"></i>
+                      Back to Dashboard
+                    </Button>
                   </div>
-                  <Row xs={1} sm={2} lg={3} xl={4} className="g-4">
-                    {filteredBooks.map(renderBookCard)}
-                  </Row>
+
+                  {renderSearchAndFilters()}
+
+                  {isLoading ? (
+                    renderLoadingState()
+                  ) : filteredBooks.length === 0 ? (
+                    renderEmptyState()
+                  ) : (
+                    <>
+                      <div className="books-grid-header mb-4 d-flex justify-content-between align-items-center">
+                        <div>
+                          <h2 className="h4 mb-0">Available Books</h2>
+                          <p className="text-muted mb-0">
+                            Showing {filteredBooks.length} of {books.length} books
+                          </p>
+                        </div>
+                      </div>
+                      <Row xs={1} sm={2} lg={3} xl={4} className="g-4">
+                        {filteredBooks.map(renderBookCard)}
+                      </Row>
+                    </>
+                  )}
                 </>
               )}
             </>
