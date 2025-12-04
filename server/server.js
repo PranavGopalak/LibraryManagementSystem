@@ -6,11 +6,19 @@ const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+
 const app = express();
-const port = 3001;
+
+// IMPORTANT: Cloud Run sets PORT automatically (usually 8080).
+// Locally, it falls back to 3001.
+const PORT = process.env.PORT || 3001;
+
+// Single shared pool variable for all routes
+let pool;
 
 app.use(express.json());
 app.use(cors());
+
 // Basic request logger for debugging
 app.use((req, res, next) => {
     console.log('[REQ]', req.method, req.path);
@@ -501,8 +509,9 @@ async function startServer() {
         await initializeSchema();
 
 
-        app.listen(port, () => {
-            console.log(`Server is running on http://localhost:${port}`);
+        // IMPORTANT: listen on PORT and 0.0.0.0 for Cloud Run
+        app.listen(PORT, "0.0.0.0", () => {
+            console.log(`Server is running on port ${PORT}`);
         });
 
     } catch (error) {
